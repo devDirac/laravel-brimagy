@@ -67,6 +67,45 @@ class ProductosController extends BaseController
                 $id_catalogo = $catalogo->id;
             }
 
+            // Verificar si ya existe un producto con ese SKU
+            $productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
+
+            if ($productoExistente) {
+                // Si existe, actualizarlo
+                $productoExistente->update([
+                    'nombre_producto' => $request->nombre_producto,
+                    'descripcion' => $request->descripcion,
+                    'marca' => $request->marca,
+                    'color' => $request->color,
+                    'id_proveedor' => $id_proveedor,
+                    'id_catalogo' => $id_catalogo,
+                    'costo_con_iva' => $request->costo_con_iva,
+                    'costo_sin_iva' => $request->costo_sin_iva,
+                    'costo_puntos_con_iva' => $request->costo_puntos_con_iva,
+                    'costo_puntos_sin_iva' => $request->costo_puntos_sin_iva,
+                    'fee_brimagy' => $request->fee_brimagy,
+                    'subtotal' => $request->subtotal,
+                    'envio_base' => $request->envio_base,
+                    'costo_caja' => $request->costo_caja,
+                    'envio_extra' => $request->envio_extra,
+                    'total_envio' => $request->total_envio,
+                    'total' => $request->total,
+                    'puntos' => $request->puntos,
+                    'factor' => $request->factor,
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+
+                $user = Auth::user();
+                $log['evento'] = 'Actualización de producto';
+                $log['descripcion'] = "El usuario con id: {$user->id} actualizó el producto con id: {$productoExistente->id} (SKU: {$request->sku})";
+                $log['id_usuario'] = $user->id;
+                BitacoraEventos::create($log);
+
+                DB::commit();
+
+                return $this->sendResponse($productoExistente, 'Producto actualizado exitosamente.');
+            }
+
             $producto = CatalogoProductos::create([
                 'nombre_producto' => $request->nombre_producto,
                 'descripcion' => $request->descripcion,
@@ -104,6 +143,56 @@ class ProductosController extends BaseController
             return $this->sendError('Error al registrar el producto', $th->getMessage(), 500);
         }
     }
+
+    public function verificarSkus(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'skus' => 'required|array',
+                'skus.*' => 'string'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Formato de datos no válido', $validator->errors());
+            }
+
+            $skusExistentes = CatalogoProductos::whereIn('sku', $request->skus)
+                ->pluck('sku')
+                ->toArray();
+
+            return $this->sendResponse([
+                'skus_existentes' => $skusExistentes
+            ]);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al verificar SKUs', $th->getMessage(), 500);
+        }
+    }
+
+    public function verificarSkuDisponible(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'sku' => 'required|string'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('SKU es requerido', $validator->errors());
+            }
+
+            $productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
+
+            return $this->sendResponse([
+                'disponible' => !$productoExistente,
+                'producto_existente' => $productoExistente ? [
+                    'id' => $productoExistente->id,
+                    'nombre' => $productoExistente->nombre_producto
+                ] : null
+            ]);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al verificar SKU', $th->getMessage(), 500);
+        }
+    }
+
     public function getCatalogoProductos()
     {
         try {

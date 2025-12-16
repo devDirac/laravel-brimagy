@@ -40,3 +40,5 @@ Route::post('crearProducto', [ProductosController::class, 'crearProducto'])->mid
 Route::get('getCatalogoProductos', [ProductosController::class, 'getCatalogoProductos'])->middleware($SANCTUM);
 Route::put('editarProducto', [ProductosController::class, 'editarProducto'])->middleware($SANCTUM);
 Route::delete('eliminarProducto', [ProductosController::class, 'eliminarProducto'])->middleware($SANCTUM);
+Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->middleware($SANCTUM);
+Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
