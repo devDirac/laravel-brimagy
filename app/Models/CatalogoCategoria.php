@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 class CatalogoCategoria extends Model
 {
     use HasFactory;
-    protected $table = 'dc_catalogo_categoria';
+    protected $table = 'awards_categories';//dc_catalogo_categoria
     protected $fillable = [
-        'nombre',
-        'descripcion'
+        'desc',
+        'status'
     ];
 
     protected $casts = [

@@ -19,7 +19,7 @@ class CategoriasController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
-                'descripcion' => 'required|string',
+                //'descripcion' => 'required|string',
             ]);
 
             if ($validator->fails()) {
@@ -28,8 +28,8 @@ class CategoriasController extends BaseController
             }
 
             $producto = CatalogoCategoria::create([
-                'nombre' => $request->nombre,
-                'descripcion' => $request->descripcion,
+                'desc' => $request->nombre,
+                //'descripcion' => $request->descripcion,
             ]);
 
             $user = Auth::user();
@@ -62,7 +62,7 @@ class CategoriasController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'id' => 'required|integer|exists:dc_catalogo_categoria,id'
+                'id' => 'required|integer|exists:awards_categories,id'
             ]);
             if ($validator->fails()) {
                 DB::rollBack();
@@ -76,8 +76,8 @@ class CategoriasController extends BaseController
 
             // Preparar datos a actualizar
             $datosParaActualizar = $request->only([
-                'nombre',
-                'descripcion'
+                'desc',
+                //'descripcion'
             ]);
 
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
@@ -108,7 +108,7 @@ class CategoriasController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'id' => 'required|integer|exists:dc_catalogo_categoria,id'
+                'id' => 'required|integer|exists:awards_categories,id'
             ]);
 
             if ($validator->fails()) {

@@ -14,7 +14,9 @@ return new class extends Migration
         Schema::create('dc_catalogo_proveedores', function (Blueprint $table) {
             $table->id();
             $table->string('nombre');
-            $table->string('descripcion');
+            $table->string('descripcion')->nullable();
+            $table->string('telefono');
+            $table->string('correo');
             $table->timestamps();
         });
     }

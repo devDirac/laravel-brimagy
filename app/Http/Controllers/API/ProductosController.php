@@ -59,7 +59,7 @@ class ProductosController extends BaseController
                 $id_proveedor = $proveedor->id;
 
                 // Buscar categoría por nombre
-                $catalogo = CatalogoCategoria::where('nombre', 'like', '%' . $request->catalogo . '%')->first();
+                $catalogo = CatalogoCategoria::where('desc', 'like', '%' . $request->catalogo . '%')->first();
                 if (!$catalogo) {
                     DB::rollBack();
                     return $this->sendError('La categoría "' . $request->catalogo . '" no existe', 'error', 404);
@@ -193,10 +193,10 @@ class ProductosController extends BaseController
         }
     }
 
-    public function getCatalogoProductos()
+    public function getCatalogoProductos(Request $request)
     {
         try {
-            $productos = DB::table('dc_catalogo_productos as cpt')
+            $query = DB::table('dc_catalogo_productos as cpt')
                 ->select(
                     'cpt.id',
                     'cpt.nombre_producto',
@@ -205,7 +205,7 @@ class ProductosController extends BaseController
                     'cpt.sku',
                     'cpt.color',
                     'cpv.nombre as proveedor',
-                    'cc.nombre as catalogo',
+                    'ac.desc as catalogo',
                     'cpt.costo_con_iva',
                     'cpt.costo_sin_iva',
                     'cpt.costo_puntos_con_iva',
@@ -221,16 +221,32 @@ class ProductosController extends BaseController
                     'cpt.factor',
                     'cpt.created_at as fecha_creacion',
                 )
-                ->join('dc_catalogo_categoria as cc', 'cpt.id_catalogo', '=', 'cc.id')
-                ->join('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id')
-                ->orderBy('cpt.id', 'desc')
-                ->get();
+                ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id');
+
+            // BÚSQUEDA
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('cpt.nombre_producto', 'LIKE', "%{$search}%")
+                        ->orWhere('cpt.descripcion', 'LIKE', "%{$search}%")
+                        ->orWhere('cpt.marca', 'LIKE', "%{$search}%")
+                        ->orWhere('cpt.sku', 'LIKE', "%{$search}%")
+                        ->orWhere('cpt.color', 'LIKE', "%{$search}%")
+                        ->orWhere('cpv.nombre', 'LIKE', "%{$search}%")
+                        ->orWhere('cpt.puntos', 'LIKE', "%{$search}%")
+                        ->orWhere('ac.desc', 'LIKE', "%{$search}%");
+                });
+            }
+
+            $productos = $query->orderBy('cpt.created_at', 'desc')->get();
 
             return $this->sendResponse($productos);
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener los productos', $th, 500);
         }
     }
+
     public function editarProducto(Request $request)
     {
         DB::beginTransaction();
@@ -331,6 +347,63 @@ class ProductosController extends BaseController
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al eliminar el producto', $th->getMessage(), 500);
+        }
+    }
+
+    public function busquedaInteligenteBrimagy(Request $request)
+    {
+        try {
+            $query = DB::table('dc_catalogo_productos as cpt')
+                ->select(
+                    'cpt.id',
+                    'cpt.nombre_producto',
+                    'cpt.descripcion',
+                    'cpt.marca',
+                    'cpt.sku',
+                    'cpt.color',
+                    'cpv.nombre as proveedor',
+                    'ac.desc as catalogo',
+                    'cpt.costo_con_iva',
+                    'cpt.costo_sin_iva',
+                    'cpt.costo_puntos_con_iva',
+                    'cpt.costo_puntos_sin_iva',
+                    'cpt.fee_brimagy',
+                    'cpt.subtotal',
+                    'cpt.envio_base',
+                    'cpt.costo_caja',
+                    'cpt.envio_extra',
+                    'cpt.total_envio',
+                    'cpt.total',
+                    'cpt.puntos',
+                    'cpt.factor',
+                    'cpt.created_at as fecha_creacion',
+                )
+                ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id');
+
+            // BÚSQUEDA POR PUNTOS CON RANGO
+            if ($request->has('puntos') && !empty($request->puntos)) {
+                $puntos = (int) $request->puntos;
+                $rangoMinimo = $puntos - 200;
+                $rangoMaximo = $puntos + 200;
+
+                $query->whereBetween('cpt.puntos', [$rangoMinimo, $rangoMaximo]);
+            }
+
+            // BÚSQUEDA POR CATEGORÍA
+            if ($request->has('categoria') && !empty($request->categoria)) {
+                $categoria = $request->categoria;
+                $query->where('ac.id', '=', $categoria);
+            }
+
+            // ORDENAR POR TOTAL DE MANERA ASCENDENTE (menor a mayor)
+            $productos = $query->orderBy('cpt.total', 'asc')->get();
+
+            $productos = $query->orderBy('cpt.created_at', 'desc')->get();
+
+            return $this->sendResponse($productos);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener los productos', $th, 500);
         }
     }
 }

@@ -42,3 +42,5 @@ Route::put('editarProducto', [ProductosController::class, 'editarProducto'])->mi
 Route::delete('eliminarProducto', [ProductosController::class, 'eliminarProducto'])->middleware($SANCTUM);
 Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->middleware($SANCTUM);
 Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
+
+Route::get('busquedaInteligenteBrimagy', [ProductosController::class, 'busquedaInteligenteBrimagy'])->middleware($SANCTUM);

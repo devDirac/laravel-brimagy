@@ -11,7 +11,9 @@ class CatalogoProveedores extends Model
     protected $table = 'dc_catalogo_proveedores';
     protected $fillable = [
         'nombre',
-        'descripcion'
+        'descripcion',
+        'telefono',
+        'correo',
     ];
 
     protected $casts = [

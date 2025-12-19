@@ -19,7 +19,9 @@ class ProveedorController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
-                'descripcion' => 'required|string',
+                'descripcion' => 'nullable|string',
+                'telefono' => 'required|string',
+                'correo' => 'required|string',
             ]);
 
             if ($validator->fails()) {
@@ -30,6 +32,8 @@ class ProveedorController extends BaseController
             $proveedor = CatalogoProveedores::create([
                 'nombre' => $request->nombre,
                 'descripcion' => $request->descripcion,
+                'telefono' => $request->telefono,
+                'correo' => $request->correo,
             ]);
 
             $user = Auth::user();
@@ -77,7 +81,9 @@ class ProveedorController extends BaseController
             // Preparar datos a actualizar
             $datosParaActualizar = $request->only([
                 'nombre',
-                'descripcion'
+                'descripcion',
+                'telefono',
+                'correo'
             ]);
 
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
