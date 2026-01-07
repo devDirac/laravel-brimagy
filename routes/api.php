@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\CanjesController;
 use App\Http\Controllers\API\CategoriasController;
 use App\Http\Controllers\API\ProductosController;
 use App\Http\Controllers\API\ProveedorController;
@@ -44,3 +45,14 @@ Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->mid
 Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
 
 Route::get('busquedaInteligenteBrimagy', [ProductosController::class, 'busquedaInteligenteBrimagy'])->middleware($SANCTUM);
+
+//CATALOGO CANJES
+Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SANCTUM);
+
+//VALIDACIÓN DE IDENTIDAD
+Route::post('enviarValidacion', [CanjesController::class, 'enviarValidacion'])->middleware($SANCTUM);
+
+Route::post('solicitarCodigoValidacion', [CanjesController::class, 'solicitarCodigoValidacion']);
+Route::get('getCodigoVerificacionById', [CanjesController::class, 'getCodigoVerificacionById']);
+Route::get('getCanjeById', [CanjesController::class, 'getCanjeById']);
+Route::post('validarIdentidadPorCodigo', [CanjesController::class, 'validarIdentidadPorCodigo']);
