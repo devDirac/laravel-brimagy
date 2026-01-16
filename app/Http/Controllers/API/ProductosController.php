@@ -24,7 +24,7 @@ class ProductosController extends BaseController
                 'descripcion' => 'required|string',
                 'marca' => 'required|string',
                 'sku' => 'required|string',
-                'color' => 'required|string',
+                'color' => 'nullable|string',
                 'costo_con_iva' => 'required|integer',
                 'costo_sin_iva' => 'required|integer',
                 'costo_puntos_con_iva' => 'required|integer',
@@ -34,11 +34,12 @@ class ProductosController extends BaseController
                 'envio_base' => 'required|integer',
                 'costo_caja' => 'required|integer',
                 'envio_extra' => 'required|integer',
-                'total_envio' => 'required|integer',
+                'total_envio' => 'nullable|integer',
                 'total' => 'required|integer',
                 'puntos' => 'required|integer',
                 'factor' => 'required|integer',
                 'tipo_registro' => 'required|string',
+                'tipo_producto' => 'required|string',
             ]);
 
             if ($validator->fails()) {
@@ -92,6 +93,7 @@ class ProductosController extends BaseController
                     'total' => $request->total,
                     'puntos' => $request->puntos,
                     'factor' => $request->factor,
+                    'tipo_producto' => $request->tipo_producto,
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
 

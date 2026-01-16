@@ -17,7 +17,9 @@ use App\Models\CatalogoProductos;
 use App\Models\CatalogoProveedores;
 use App\Models\ValidacionCanje;
 use App\Mail\ValidacionCanjeEnviada;
+use App\Models\User;
 use App\Services\WhatsAppService;
+use Illuminate\Support\Facades\Crypt;
 
 class CanjesController extends BaseController
 {
@@ -243,20 +245,40 @@ class CanjesController extends BaseController
         $codigo = random_int(100000, 999999);
         return $codigo;
     }
+    private function encriptarCorto($id)
+    {
+        $key = env('APP_KEY');
+        $encoded = base64_encode($id . '|' . time());
+        return rtrim(strtr($encoded, '+/', '-_'), '=');
+    }
+    private function desencriptarCorto($hash)
+    {
+        $decoded = base64_decode(strtr($hash, '-_', '+/'));
+        [$id, $timestamp] = explode('|', $decoded);
+
+        return $id;
+    }
     private function enviarWhatsApp($canje, $codigo = null, $validado = null)
     {
         try {
-            $telefonos = [
-                "525578802105"
-            ];
+            //conseguir los telefonos de todos los administradores
+            $telefonosAdmins = User::where('tipo_usuario', 6)
+                ->whereNotNull('phone')
+                ->where('phone', '!=', '')
+                ->pluck('phone')
+                ->toArray();
 
-            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canje->id}";
+            $canjeIdEncriptado = $this->encriptarCorto($canje->id);
+            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canjeIdEncriptado}";
 
             if ($codigo) {
                 $titulo = "🔐 Código de verificación de identidad 🔐";
                 $mensaje = "Ha solicitado un código para verificar su identidad, ingresa a la web y coloca el siguiente código para verificarte:\n\n" .
                     "🔐 Código: *{$codigo}*\n\n" .
                     "🔗 Link hacia la web:\n{$urlva}\n\n";
+
+                $this->whatsappService->sendMessage($canje->phone, $titulo);
+                $this->whatsappService->sendMessage($canje->phone, $mensaje);
             } else if ($validado) {
                 $titulo = "✅ Identidad validada correctamente ✅";
                 $mensaje = "Se ha validado la identidad de un canje por parte de un cliente, los datos validados corresponden a:\n\n" .
@@ -265,6 +287,11 @@ class CanjesController extends BaseController
                     "📱 Teléfono: {$canje->phone}\n" .
                     "🎁 Premio: {$canje->desc}\n" .
                     "📄 Folio: {$canje->folio}\n";
+
+                foreach ($telefonosAdmins as $telefono) {
+                    $this->whatsappService->sendMessage($telefono, $titulo);
+                    $this->whatsappService->sendMessage($telefono, $mensaje);
+                }
             } else {
                 $titulo = "🔔 Nueva solicitud de validación de identidad 🔔";
                 $mensaje = "📋 *Detalles del canje:*\n\n" .
@@ -275,12 +302,11 @@ class CanjesController extends BaseController
                     "📄 Folio: {$canje->folio}\n" .
                     "🔗 Link para validación:\n{$urlva}\n\n" .
                     "✅ Por favor, proceder con la validación de identidad.";
+
+                $this->whatsappService->sendMessage($canje->phone, $titulo);
+                $this->whatsappService->sendMessage($canje->phone, $mensaje);
             }
 
-            foreach ($telefonos as $telefono) {
-                $this->whatsappService->sendMessage($telefono, $titulo);
-                $this->whatsappService->sendMessage($telefono, $mensaje);
-            }
             return $this->sendResponse('Validación enviada exitosamente.');
         } catch (\Throwable $th) {
             return $this->sendError('Error al enviar la validación', $th->getMessage(), 500);
@@ -293,7 +319,12 @@ class CanjesController extends BaseController
             $destinatarios = [
                 'carrera.jorge@dirac.mx'
             ];
-            $correoAdmin = 'carrera.jorge@dirac.mx';
+            //conseguir los correos de todos los administradores
+            $correosAdmins = User::where('tipo_usuario', 6)
+                ->whereNotNull('email')
+                ->where('email', '!=', '')
+                ->pluck('email')
+                ->toArray();
 
             $canjeData = (object)[
                 'folio' => $canje->folio,
@@ -309,12 +340,15 @@ class CanjesController extends BaseController
                 'codigo_postal' => $canje->postal_code,
             ];
 
-            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canje->id}";
+            $canjeIdEncriptado = $this->encriptarCorto($canje->id); //Crypt::encryptString($canje->id)
+            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canjeIdEncriptado}";
 
             if ($codigo) {
                 Mail::to($canjeData->email)->send(new SolicitarCodigo($canjeData, $codigo, $urlva));
             } else if ($validado) {
-                Mail::to($destinatarios)->send(new IdentidadValidada($canjeData, $codigo, $urlva));
+                foreach ($correosAdmins as $correo) {
+                    Mail::to($correo)->send(new IdentidadValidada($canjeData, $codigo, $urlva));
+                }
             } else {
                 Mail::to($canjeData->email)->send(new ValidacionCanjeEnviada($canjeData, $codigo, $urlva));
             }
@@ -329,6 +363,10 @@ class CanjesController extends BaseController
     {
         try {
             $query = DB::table('swaps_view as sp')
+                ->leftJoin('dc_validacion_canje as vc', function ($join) {
+                    $join->on('vc.id_canje', '=', 'sp.id')
+                        ->whereRaw('vc.id = (SELECT MAX(id) FROM dc_validacion_canje WHERE id_canje = sp.id)');
+                })
                 ->select(
                     'sp.id',
                     'sp.folio',
@@ -381,6 +419,8 @@ class CanjesController extends BaseController
     public function getCanjeById(Request $request)
     {
         try {
+            $idCanjeDesencriptado = $this->desencriptarCorto($request->id_canje);
+
             $canje = DB::table('swaps_view as sp')
                 ->select(
                     'sp.id',
@@ -411,7 +451,7 @@ class CanjesController extends BaseController
                     'vc.codigo_validacion'
                 )
                 ->leftJoin('dc_validacion_canje as vc', 'vc.id_canje', '=', 'sp.id')
-                ->where('sp.id', $request->id_canje)
+                ->where('sp.id', $idCanjeDesencriptado)
                 ->first();
 
             if (!$canje) {
@@ -479,7 +519,9 @@ class CanjesController extends BaseController
     public function getCodigoVerificacionById(Request $request)
     {
         try {
-            $codigoVerificacion = ValidacionCanje::where('id_canje', $request->id_canje)
+            $idCanjeDesencriptado = $this->desencriptarCorto($request->id_canje);
+
+            $codigoVerificacion = ValidacionCanje::where('id_canje', $idCanjeDesencriptado)
                 ->whereNotNull('codigo_validacion')
                 ->where('codigo_validacion', '!=', '')
                 ->first();

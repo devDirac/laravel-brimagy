@@ -29,7 +29,8 @@ class CatalogoProductos extends Model
         'total_envio',
         'total',
         'puntos',
-        'factor'
+        'factor',
+        'tipo_producto'
     ];
 
     protected $casts = [

@@ -207,14 +207,4 @@ class UserController extends BaseController
             return $this->sendError('Error al obtener los promotores', $th, 500);
         }
     }
-    public function getPromotoresOnly(Request $request)
-    {
-        try {
-            $usuariosPromotores = User::where('tipo_usuario', 2)
-                ->get();
-            return $this->sendResponse($usuariosPromotores);
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los promotores', $th, 500);
-        }
-    }
 }

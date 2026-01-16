@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('marca');
             $table->string('sku');
             $table->string('color')->nullable();
-            $table->foreignId('id_proveedor')->constrained('dc_catalogo_productos')->onDelete('cascade');
+            $table->foreignId('id_proveedor')->constrained('dc_catalogo_proveedores')->onDelete('cascade');
             $table->foreignId('id_catalogo')->constrained('dc_categoria_catalogo')->onDelete('cascade');
             $table->integer('costo_con_iva');
             $table->integer('costo_sin_iva');
@@ -33,6 +33,7 @@ return new class extends Migration
             $table->integer('total');
             $table->integer('puntos');
             $table->integer('factor');
+            $table->enum('tipo_producto', ['fisico', 'digital'])->default('fisico');
             $table->timestamps();
         });
     }

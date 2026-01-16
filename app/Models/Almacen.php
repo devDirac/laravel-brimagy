@@ -5,17 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class CatalogoProveedores extends Model
+class OrdenCompra extends Model
 {
     use HasFactory;
-    protected $table = 'dc_catalogo_proveedores';
+    protected $table = 'dc_orden_compra';
     protected $fillable = [
-        'nombre',
-        'razon_social',
-        'descripcion',
-        'nombre_contacto',
-        'telefono',
-        'correo',
+        'id_proveedor',
+        'id_usuario',
+        'productos_canje',
+        'observaciones',
+        'estatus',
     ];
 
     protected $casts = [

@@ -19,9 +19,11 @@ class ProveedorController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
+                'razon_social' => 'nullable|string',
                 'descripcion' => 'nullable|string',
-                'telefono' => 'required|string',
-                'correo' => 'required|string',
+                'nombre_contacto' => 'nullable|string',
+                'telefono' => 'nullable|string',
+                'correo' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -31,7 +33,9 @@ class ProveedorController extends BaseController
 
             $proveedor = CatalogoProveedores::create([
                 'nombre' => $request->nombre,
+                'razon_social' => $request->razon_social,
                 'descripcion' => $request->descripcion,
+                'nombre_contacto' => $request->nombre_contacto,
                 'telefono' => $request->telefono,
                 'correo' => $request->correo,
             ]);

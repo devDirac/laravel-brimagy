@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CanjesController;
 use App\Http\Controllers\API\CategoriasController;
+use App\Http\Controllers\API\OrdenCompraController;
 use App\Http\Controllers\API\ProductosController;
 use App\Http\Controllers\API\ProveedorController;
 use App\Http\Controllers\API\UserController;
@@ -51,8 +52,15 @@ Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SAN
 
 //VALIDACIÓN DE IDENTIDAD
 Route::post('enviarValidacion', [CanjesController::class, 'enviarValidacion'])->middleware($SANCTUM);
-
 Route::post('solicitarCodigoValidacion', [CanjesController::class, 'solicitarCodigoValidacion']);
 Route::get('getCodigoVerificacionById', [CanjesController::class, 'getCodigoVerificacionById']);
 Route::get('getCanjeById', [CanjesController::class, 'getCanjeById']);
 Route::post('validarIdentidadPorCodigo', [CanjesController::class, 'validarIdentidadPorCodigo']);
+
+//ORDEN DE COMPRA
+Route::get('getCanjesPorProveedor', [OrdenCompraController::class, 'getCanjesPorProveedor'])->middleware($SANCTUM);
+Route::get('getProveedoresOC', [OrdenCompraController::class, 'getProveedoresOC'])->middleware($SANCTUM);
+Route::post('enviarCotizacionProveedor', [OrdenCompraController::class, 'enviarCotizacionProveedor'])->middleware($SANCTUM);
+Route::get('getOrdenCompraPorProveedor', [OrdenCompraController::class, 'getOrdenCompraPorProveedor']);
+Route::post('aceptarProductoOC', [OrdenCompraController::class, 'aceptarProductoOC']);
+Route::post('rechazarProductoOC', [OrdenCompraController::class, 'rechazarProductoOC']);

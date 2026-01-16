@@ -14,9 +14,11 @@ return new class extends Migration
         Schema::create('dc_catalogo_proveedores', function (Blueprint $table) {
             $table->id();
             $table->string('nombre');
+            $table->string('razon_social')->nullable();
             $table->string('descripcion')->nullable();
-            $table->string('telefono');
-            $table->string('correo');
+            $table->string('nombre_contacto')->nullable();
+            $table->string('telefono')->nullable();
+            $table->string('correo')->nullable();
             $table->timestamps();
         });
     }
