@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class CatalogoCategoria extends Model
 {
     use HasFactory;
-    protected $table = 'awards_categories';//dc_catalogo_categoria
+    protected $table = 'awards_categories';
     protected $fillable = [
         'desc',
         'status'

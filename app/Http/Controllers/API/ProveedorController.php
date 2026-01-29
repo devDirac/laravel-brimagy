@@ -86,6 +86,8 @@ class ProveedorController extends BaseController
             $datosParaActualizar = $request->only([
                 'nombre',
                 'descripcion',
+                'nombre_contacto',
+                'razon_social',
                 'telefono',
                 'correo'
             ]);
@@ -148,6 +150,38 @@ class ProveedorController extends BaseController
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al eliminar el proveedor', $th->getMessage(), 500);
+        }
+    }
+    public function getProductoNuevoProveedor(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'nombre_producto' => 'required|string'
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('Falta el nombre del producto.', $validator->errors());
+            }
+            $proveedores = DB::table('dc_catalogo_proveedores as cp')
+                ->select(
+                    'cdp.id',
+                    'cdp.nombre_producto',
+                    'ac.desc as categoria',
+                    'cdp.marca',
+                    'cdp.sku',
+                    'cp.id as id_proveedor',
+                    'cp.nombre as nombre_proveedor',
+                )
+                ->leftJoin('dc_catalogo_productos as cdp', 'cp.id', '=', 'cdp.id_proveedor')
+                ->leftJoin('awards_categories as ac', 'cdp.id_catalogo', '=', 'ac.id')
+                ->where('cdp.nombre_producto', 'LIKE', "%{$request->nombre_producto}%")
+                ->orderBy('cdp.created_at', 'desc')
+                ->get();
+
+            return $this->sendResponse($proveedores, 'Proveedores obtenidos exitosamente.');
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener los proveedores', $th, 500);
         }
     }
 }

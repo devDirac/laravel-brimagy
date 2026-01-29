@@ -213,6 +213,9 @@ class CanjesController extends BaseController
             $user = Auth::user();
             $validacion = ValidacionCanje::create([
                 'id_canje' => $request->id,
+                'id_producto' => $request->id_producto,
+                'cantidad_producto' => $request->number_of_awards,
+                'id_proveedor' => $request->id_proveedor,
                 'id_usuario_admin' => $user->id,
             ]);
 
@@ -224,7 +227,6 @@ class CanjesController extends BaseController
                 $this->enviarWhatsApp($canje);
                 $this->enviarCorreo($canje);
             }
-
 
             $log['evento'] = 'Creación de validación de cliente';
             $log['descripcion'] = "El usuario con id: {$user->id} envió un mensaje para validar el canje: {$canje->folio}";
@@ -392,8 +394,11 @@ class CanjesController extends BaseController
                     'sp.additional_reference as referencia_adicional',
                     'sp.created_at as creacion_canje',
                     'sp.status as estado_canje',
+                    'cdp.id as id_producto',
+                    'cdp.id_proveedor',
                     DB::raw('(SELECT vc.estatus FROM dc_validacion_canje vc WHERE vc.id_canje = sp.id LIMIT 1) as estado_validacion')
-                );
+                )
+                ->leftJoin('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {

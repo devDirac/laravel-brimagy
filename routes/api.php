@@ -58,9 +58,23 @@ Route::get('getCanjeById', [CanjesController::class, 'getCanjeById']);
 Route::post('validarIdentidadPorCodigo', [CanjesController::class, 'validarIdentidadPorCodigo']);
 
 //ORDEN DE COMPRA
+Route::get('getOCPorId', [OrdenCompraController::class, 'getOCPorId'])->middleware($SANCTUM);
+Route::get('getOCPorIdProveedor', [OrdenCompraController::class, 'getOCPorIdProveedor'])->middleware($SANCTUM);
 Route::get('getCanjesPorProveedor', [OrdenCompraController::class, 'getCanjesPorProveedor'])->middleware($SANCTUM);
 Route::get('getProveedoresOC', [OrdenCompraController::class, 'getProveedoresOC'])->middleware($SANCTUM);
 Route::post('enviarCotizacionProveedor', [OrdenCompraController::class, 'enviarCotizacionProveedor'])->middleware($SANCTUM);
 Route::get('getOrdenCompraPorProveedor', [OrdenCompraController::class, 'getOrdenCompraPorProveedor']);
 Route::post('aceptarProductoOC', [OrdenCompraController::class, 'aceptarProductoOC']);
 Route::post('rechazarProductoOC', [OrdenCompraController::class, 'rechazarProductoOC']);
+Route::put('enviarOCAprobacion', [OrdenCompraController::class, 'enviarOCAprobacion']);
+Route::put('enviarOrdenCompraFileProveedor', [OrdenCompraController::class, 'enviarOrdenCompraFileProveedor'])->middleware($SANCTUM);
+Route::put('rechazarCotizacionDeProveedor', [OrdenCompraController::class, 'rechazarCotizacionDeProveedor'])->middleware($SANCTUM);
+
+//FACTURAS XML Y PDF
+Route::post('validarFacturaOrdenCompra', [OrdenCompraController::class, 'validarFacturaOrdenCompra']);
+Route::post('subirPDFFactura', [OrdenCompraController::class, 'subirPDFFactura']);
+Route::put('validarOrdenCompraFinal', [OrdenCompraController::class, 'validarOrdenCompraFinal']);
+
+//MANDAR PRODUCTO A OTRO PROVEEDOR
+Route::get('getProductoNuevoProveedor', [ProveedorController::class, 'getProductoNuevoProveedor'])->middleware($SANCTUM);
+Route::put('enviarANuevoProveedor', [OrdenCompraController::class, 'enviarANuevoProveedor']);

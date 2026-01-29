@@ -15,6 +15,10 @@ return new class extends Migration
             $table->id();
             $table->integer('id_usuario_admin');
             $table->integer('id_canje');
+            $table->integer('id_producto');
+            $table->integer('cantidad_producto');
+            $table->integer('id_proveedor');
+            $table->string('no_orden')->nullable();
             $table->datetime('fecha_validacion')->nullable();
             $table->integer('codigo_validacion')->nullable();
             $table->enum('estatus', ['notificacion_enviada', 'solicitud_enviada', 'identidad_validada'])->default('notificacion_enviada');

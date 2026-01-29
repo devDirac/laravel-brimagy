@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('dc_orden_compra', function (Blueprint $table) {
+        Schema::create('dc_facturas', function (Blueprint $table) {
             $table->id();
-            $table->string('no_orden');
+            $table->foreignId('id_orden_compra')->constrained('dc_orden_compra')->onDelete('cascade');
             $table->foreignId('id_proveedor')->constrained('dc_catalogo_proveedores')->onDelete('cascade');
             $table->foreignId('id_usuario')->constrained('users')->onDelete('cascade');
-            $table->json('productos_canje');
-            $table->longText('observaciones')->nullable();
-            $table->enum('estatus', ['cotizacion_enviada_a_proveedor', 'cotizacion_validada_por_proveedor', 'orden_compra_enviada_a_proveedor', 'xml_validado_correctamente_proveedor', 'factura_subida_correctamente_proveedor', 'orden_validada_por_proveedor', 'cotizacion_rechazada'])->default('cotizacion_enviada_a_proveedor');
+            $table->string('nombre_factura');
+            $table->string('tipo_archivo');
+            $table->string('url_factura');
             $table->timestamps();
         });
     }
@@ -28,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('dc_orden_compra');
+        Schema::dropIfExists('dc_facturas');
     }
 };
