@@ -5,19 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Facturas extends Model
+class Notificaciones extends Model
 {
     use HasFactory;
-    protected $table = 'dc_facturas';
+    protected $table = 'dc_notificaciones';
+
     protected $fillable = [
-        'id_orden_compra',
-        'id_proveedor',
-        'id_usuario',
-        'nombre_factura',
-        'tipo_archivo',
-        'fecha_pago',
-        'estatus',
-        'url_factura'
+        'detalle',
+        'creada',
+        'vista_fecha',
+        'vista',
+        'id_tipo_notificacion',
+        'id_usuario_creador',
+        'id_usuario_para',
     ];
 
     protected $casts = [

@@ -19,7 +19,7 @@ use App\Models\ValidacionCanje;
 use App\Mail\ValidacionCanjeEnviada;
 use App\Models\User;
 use App\Services\WhatsAppService;
-use Illuminate\Support\Facades\Crypt;
+use Carbon\Carbon;
 
 class CanjesController extends BaseController
 {
@@ -271,7 +271,7 @@ class CanjesController extends BaseController
                 ->toArray();
 
             $canjeIdEncriptado = $this->encriptarCorto($canje->id);
-            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canjeIdEncriptado}";
+            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}";
 
             if ($codigo) {
                 $titulo = "🔐 Código de verificación de identidad 🔐";
@@ -343,7 +343,7 @@ class CanjesController extends BaseController
             ];
 
             $canjeIdEncriptado = $this->encriptarCorto($canje->id); //Crypt::encryptString($canje->id)
-            $urlva = env('APP_FRONT_URL') . "/validar-canje/{$canjeIdEncriptado}";
+            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}";
 
             if ($codigo) {
                 Mail::to($canjeData->email)->send(new SolicitarCodigo($canjeData, $codigo, $urlva));
@@ -411,6 +411,17 @@ class CanjesController extends BaseController
                         ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")
                         ->orWhere('vc.estatus', 'LIKE', "%{$search}%");
                 });
+            }
+
+            // BÚSQUEDA POR FECHAS
+            if (($request->has('fecha1') && !empty($request->fecha1)) && ($request->has('fecha2') && !empty($request->fecha2))) {
+                $fecha1 = Carbon::parse($request->fecha1)->startOfDay();
+                $fecha2 = Carbon::parse($request->fecha2)->endOfDay();
+                // Ordenar para que siempre la menor sea el inicio
+                $inicio = $fecha1->lt($fecha2) ? $fecha1->startOfDay() : $fecha2->startOfDay();
+                $fin    = $fecha1->lt($fecha2) ? $fecha2->endOfDay()   : $fecha1->endOfDay();
+
+                $query->whereBetween('sp.created_at', [$inicio, $fin]);
             }
 
             $canjes = $query->orderBy('sp.created_at', 'desc')->get();

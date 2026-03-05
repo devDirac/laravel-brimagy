@@ -82,6 +82,7 @@ return [
     'links' => [
         //public_path('compartida') => storage_path('app/private/compartida'),
         public_path('facturas') => storage_path('app/private/facturas'),
+        public_path('evidencias') => storage_path('app/private/evidencias'),
     ],
 
 ];

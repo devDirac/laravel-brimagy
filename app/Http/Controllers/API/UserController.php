@@ -19,7 +19,7 @@ class UserController extends BaseController
     {
         try {
             // Verifica si el email existe en la base de datos
-            $exists = User::where('correo', $request->email)->exists();
+            $exists = User::where('email', $request->email)->exists();
 
             return $this->sendResponse([
                 'exists' => $exists,
@@ -58,7 +58,13 @@ class UserController extends BaseController
     public function getUsuarios()
     {
         try {
-            $users = User::orderBy('id', 'desc')->get();
+            $users = User::select(
+                'id',
+                'name',
+                'email',
+                'status',
+                'tipo_usuario',
+            )->orderBy('id', 'desc')->get();
             return $this->sendResponse($users);
         } catch (\Throwable $th) {
             return $this->sendError('Error', $th, 500);

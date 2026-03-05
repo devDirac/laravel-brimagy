@@ -5,16 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class OrdenCompra extends Model
+class VariablesGlobales extends Model
 {
     use HasFactory;
-    protected $table = 'dc_orden_compra';
+    protected $table = 'dc_variables_globales';
     protected $fillable = [
-        'id_proveedor',
-        'id_usuario',
-        'productos_canje',
-        'observaciones',
-        'estatus',
+        'fee_brimagy',
+        'envio_base',
+        'costo_caja',
+        'envio_extra',
+        'id_plataforma',
     ];
 
     protected $casts = [

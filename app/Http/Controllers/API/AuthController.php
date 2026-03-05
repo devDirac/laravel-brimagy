@@ -15,28 +15,6 @@ use App\Models\BitacoraEventos;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-/**
- * @OA\Info(
- *     title="API Documentation",
- *     version="1.0.0",
- *     description="Documentación de la API del proyecto",
- *     @OA\Contact(
- *         email="soporte@tuempresa.com"
- *     )
- * )
- * 
- * @OA\Server(
- *     url="http://localhost:8000",
- *     description="Servidor de desarrollo"
- * )
- * 
- * @OA\SecurityScheme(
- *     type="http",
- *     securityScheme="bearerAuth",
- *     scheme="bearer",
- *     bearerFormat="JWT"
- * )
- */
 class AuthController extends BaseController
 {
 
@@ -51,8 +29,7 @@ class AuthController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
-                'usuario' => 'required|string',
-                'correo' => 'required|string|email|unique:users,correo',
+                'correo' => 'required|string|email|unique:users,email',
                 'telefono' => 'nullable|string',
                 'password' => 'required|string',
                 'permisos' => 'required|integer',
@@ -65,14 +42,14 @@ class AuthController extends BaseController
             }
 
             $user = User::create([
-                'nombre' => $request->nombre,
-                'usuario' => $request->usuario,
-                'correo' => $request->correo,
-                'telefono' => $request->telefono ?? null,
+                'name' => $request->nombre,
+                'email' => $request->correo,
+                'phone' => $request->telefono ?? null,
                 'password' => bcrypt($request->password),
                 'tipo_usuario' => $request->permisos,
                 'foto' => $request->foto ?? null,
-                'activo' => 1,
+                'status' => "ACTIVE",
+                'representative_id' => 1,
             ]);
 
             DB::commit();
@@ -147,7 +124,7 @@ class AuthController extends BaseController
             }
 
             // Buscar usuario
-            $user = User::where('correo', $request->correo)->first();
+            $user = User::where('email', $request->correo)->first();
 
             if (!$user) {
                 // Por seguridad, no revelar si el correo existe o no
@@ -269,7 +246,7 @@ class AuthController extends BaseController
 
             $infoTokenUser = DB::table('tokens')
                 ->join('users', 'users.id', '=', 'tokens.id_usuario')
-                ->select('tokens.id', 'tokens.token', 'tokens.id_usuario', 'users.nombre', 'users.correo')
+                ->select('tokens.id', 'tokens.token', 'tokens.id_usuario', 'users.name', 'users.email')
                 ->where('tokens.token', $input['token'])->get()->first();
 
             if (!$infoTokenUser) {

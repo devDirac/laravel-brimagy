@@ -63,15 +63,14 @@
 
 <body>
     <div class="container">
-        <h2>Nueva cotización recibida #000</h2>
+        <h4>¡Hola, {{ $orden->nombre_usuario }}! Confirmamos que tu premio ha sido entregado con éxito. ✅</h4>
 
-        <p>Ha recibido una nueva cotización para su aprobación en la página de Brimagy,
-            favor de acceder a través de la siguiente web:</p>
+        <p>Para asegurarnos de que todo salió perfecto, te invitamos a completar esta encuesta de {{ $orden->encuesta }}:</p>
         <br>
 
-        <a href="{{ $urlval }}">Cotización</a>
+        <a href="{{ $urlval }}"><button>Encuesta</button></a>
 
-        <p>Accede ahora y valida los datos de la cotización</p>
+        <p>Tu opinión nos ayuda a mejorar y a seguir trayendo los mejores premios para ti. <br>¡Muchas gracias!</p>
     </div>
 </body>
 

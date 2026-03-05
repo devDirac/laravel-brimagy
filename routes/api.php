@@ -1,9 +1,15 @@
 <?php
 
+use App\Http\Controllers\API\AlmacenController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CanjesController;
 use App\Http\Controllers\API\CategoriasController;
+use App\Http\Controllers\API\ConfiguracionesController;
+use App\Http\Controllers\API\EncuestasController;
+use App\Http\Controllers\API\EvidenciasController;
+use App\Http\Controllers\API\FacturasController;
+use App\Http\Controllers\API\NotificacionesController;
 use App\Http\Controllers\API\OrdenCompraController;
 use App\Http\Controllers\API\ProductosController;
 use App\Http\Controllers\API\ProveedorController;
@@ -40,12 +46,14 @@ Route::delete('eliminarCategoria', [CategoriasController::class, 'eliminarCatego
 //CATALOGO PRODUCTOS
 Route::post('crearProducto', [ProductosController::class, 'crearProducto'])->middleware($SANCTUM);
 Route::get('getCatalogoProductos', [ProductosController::class, 'getCatalogoProductos'])->middleware($SANCTUM);
+Route::get('getCatalogoProductosFisicos', [ProductosController::class, 'getCatalogoProductosFisicos'])->middleware($SANCTUM);
+Route::get('getCatalogoProductosDigitales', [ProductosController::class, 'getCatalogoProductosDigitales'])->middleware($SANCTUM);
 Route::put('editarProducto', [ProductosController::class, 'editarProducto'])->middleware($SANCTUM);
 Route::delete('eliminarProducto', [ProductosController::class, 'eliminarProducto'])->middleware($SANCTUM);
 Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->middleware($SANCTUM);
 Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
-
 Route::get('busquedaInteligenteBrimagy', [ProductosController::class, 'busquedaInteligenteBrimagy'])->middleware($SANCTUM);
+Route::get('getBitacoraProductoPorId', [ProductosController::class, 'getBitacoraProductoPorId'])->middleware($SANCTUM);
 
 //CATALOGO CANJES
 Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SANCTUM);
@@ -73,8 +81,51 @@ Route::put('rechazarCotizacionDeProveedor', [OrdenCompraController::class, 'rech
 //FACTURAS XML Y PDF
 Route::post('validarFacturaOrdenCompra', [OrdenCompraController::class, 'validarFacturaOrdenCompra']);
 Route::post('subirPDFFactura', [OrdenCompraController::class, 'subirPDFFactura']);
-Route::put('validarOrdenCompraFinal', [OrdenCompraController::class, 'validarOrdenCompraFinal']);
+Route::post('validarOrdenCompraFinal', [OrdenCompraController::class, 'validarOrdenCompraFinal']);
+Route::put('addFechaPagoFactura', [FacturasController::class, 'addFechaPagoFactura'])->middleware($SANCTUM);
 
 //MANDAR PRODUCTO A OTRO PROVEEDOR
 Route::get('getProductoNuevoProveedor', [ProveedorController::class, 'getProductoNuevoProveedor'])->middleware($SANCTUM);
-Route::put('enviarANuevoProveedor', [OrdenCompraController::class, 'enviarANuevoProveedor']);
+Route::put('enviarANuevoProveedor', [OrdenCompraController::class, 'enviarANuevoProveedor'])->middleware($SANCTUM);
+
+//ALMACEN DE PRODUCTOS
+Route::get('getProductosAlmacen', [AlmacenController::class, 'getProductosAlmacen'])->middleware($SANCTUM);
+Route::get('getProductoAlmacenPorId', [AlmacenController::class, 'getProductoAlmacenPorId'])->middleware($SANCTUM);
+Route::put('recibirProductoAlmacen', [AlmacenController::class, 'recibirProductoAlmacen'])->middleware($SANCTUM);
+Route::put('addGuiaProductoAlmacen', [AlmacenController::class, 'addGuiaProductoAlmacen'])->middleware($SANCTUM);
+Route::put('enviarProductoAlmacen', [AlmacenController::class, 'enviarProductoAlmacen'])->middleware($SANCTUM);
+Route::put('confirmarRecepcionProductoAlmacen', [AlmacenController::class, 'confirmarRecepcionProductoAlmacen'])->middleware($SANCTUM);
+
+//EVIDENCIAS DE ALMACEN DE PRODUCTOS
+Route::post('subirEvidencias', [EvidenciasController::class, 'subirEvidencias'])->middleware($SANCTUM);
+
+//ENCUESTAS
+Route::get('getEncuestasDisponibles', [EncuestasController::class, 'getEncuestasDisponibles'])->middleware($SANCTUM);
+Route::get('getPreguntasPorTipo', [EncuestasController::class, 'getPreguntasPorTipo'])->middleware($SANCTUM);
+Route::post('createPreguntaEncuesta', [EncuestasController::class, 'createPreguntaEncuesta'])->middleware($SANCTUM);
+Route::put('editarPreguntaEncuesta', [EncuestasController::class, 'editarPreguntaEncuesta'])->middleware($SANCTUM);
+Route::put('desactivarPreguntaEncuesta', [EncuestasController::class, 'desactivarPreguntaEncuesta'])->middleware($SANCTUM);
+Route::put('activarPreguntaEncuesta', [EncuestasController::class, 'activarPreguntaEncuesta'])->middleware($SANCTUM);
+Route::post('enviarEncuesta', [EncuestasController::class, 'enviarEncuesta'])->middleware($SANCTUM);
+Route::post('enviarEncuestaUsuario', [EncuestasController::class, 'enviarEncuestaUsuario'])->middleware($SANCTUM);
+
+//ENCUESTAS PARA EL USUARIO
+Route::get('getEncuestaPorTipo', [EncuestasController::class, 'getEncuestaPorTipo']);
+Route::get('getRespuestasEncuestaPorCanje', [EncuestasController::class, 'getRespuestasEncuestaPorCanje']);
+Route::post('addRespuestasEncuestaUsuario', [EncuestasController::class, 'addRespuestasEncuestaUsuario']);
+
+//RESPUESTAS DE LA ENCUESTA
+Route::get('getRespuestasPorEncuesta', [EncuestasController::class, 'getRespuestasPorEncuesta'])->middleware($SANCTUM);
+Route::get('getRespuestasPorCanje', [EncuestasController::class, 'getRespuestasPorCanje'])->middleware($SANCTUM);
+
+//NOTIFICACIONES
+Route::put('removeNotificacion', [NotificacionesController::class, 'removeNotificacion'])->middleware($SANCTUM);
+Route::get('getNotificacionesPorUsuario', [NotificacionesController::class, 'getNotificacionesPorUsuario'])->middleware($SANCTUM);
+
+//CONFIGURACION
+Route::post('crearVariablesGlobales', [ConfiguracionesController::class, 'crearVariablesGlobales'])->middleware($SANCTUM);
+Route::post('crearPlataforma', [ConfiguracionesController::class, 'crearPlataforma'])->middleware($SANCTUM);
+Route::get('getVariablesGlobales', [ConfiguracionesController::class, 'getVariablesGlobales'])->middleware($SANCTUM);
+Route::get('getPlataformas', [ConfiguracionesController::class, 'getPlataformas'])->middleware($SANCTUM);
+Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware(middleware: $SANCTUM);
+Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware(middleware: $SANCTUM);

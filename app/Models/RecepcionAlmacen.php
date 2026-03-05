@@ -5,19 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Facturas extends Model
+class RecepcionAlmacen extends Model
 {
     use HasFactory;
-    protected $table = 'dc_facturas';
+    protected $table = 'dc_recepcion_almacen';
     protected $fillable = [
-        'id_orden_compra',
-        'id_proveedor',
+        'id_canje',
         'id_usuario',
-        'nombre_factura',
-        'tipo_archivo',
-        'fecha_pago',
+        'id_producto',
+        'id_orden_compra',
+        'cantidad_producto',
+        'cantidad_almacen',
+        'fecha',
+        'comentarios',
         'estatus',
-        'url_factura'
+        'guia',
     ];
 
     protected $casts = [

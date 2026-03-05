@@ -27,6 +27,7 @@ class User extends Authenticatable
         'tipo_usuario',
         'foto',
         'status',
+        'representative_id',
         'created_at',
         'updated_at'
     ];

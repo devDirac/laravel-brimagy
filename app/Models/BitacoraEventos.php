@@ -9,12 +9,16 @@ class BitacoraEventos extends Model
 {
     use HasFactory;
     protected $table = 'bitacora_eventos';
-    public $timestamps = false;
+    //public $timestamps = false;
     protected $fillable = [
         'evento',
         'descripcion',
         'tabla',
         'id_referencia',
         'id_usuario'
+    ];
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 }

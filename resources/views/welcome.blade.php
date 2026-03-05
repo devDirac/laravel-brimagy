@@ -6,8 +6,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>API DreamSureSolutions</title>
-    <link rel="icon" type="image/x-icon" href="{{ URL::to('/') }}/img/logo.png">
+    <title>API Brimagy</title>
+    <link rel="icon" type="image/x-icon" href="{{ URL::to('/') }}/img/logo_brimagy.svg">
     <!-- Fonts -->
     <link href="https://fonts.bunny.net/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -396,10 +396,10 @@
         class="relative flex items-top justify-center min-h-screen bg-gray-100 dark:bg-gray-900 sm:items-center py-4 sm:pt-0">
         <div class="max-w-6xl mx-auto sm:px-6 lg:px-8">
             <div class="flex justify-center">
-                <img src="{{ URL::to('/') }}/img/logo.png" alt="" width="300">
+                <img src="{{ URL::to('/') }}/img/logo_brimagy.svg" alt="" width="300">
             </div>
             <div class="ml-4 text-center text-sm text-gray-500 sm:text-right sm:ml-0" style="padding-top:14px">
-                <b>API DreamSure</b> Powered by Laravel v{{ Illuminate\Foundation\Application::VERSION }} (PHP v{{ PHP_VERSION }})
+                <b>API Brimagy</b> Powered by Laravel v{{ Illuminate\Foundation\Application::VERSION }} (PHP v{{ PHP_VERSION }})
             </div>
         </div>
     </div>

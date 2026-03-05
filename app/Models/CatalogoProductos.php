@@ -30,6 +30,7 @@ class CatalogoProductos extends Model
         'total',
         'puntos',
         'factor',
+        'id_plataforma',
         'tipo_producto'
     ];
 

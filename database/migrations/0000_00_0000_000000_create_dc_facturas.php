@@ -19,6 +19,8 @@ return new class extends Migration
             $table->string('nombre_factura');
             $table->string('tipo_archivo');
             $table->string('url_factura');
+            $table->date('fecha_pago')->nullable();
+            $table->enum('estatus', ['sin_pagar', 'pagada'])->default('sin_pagar');
             $table->timestamps();
         });
     }

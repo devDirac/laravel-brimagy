@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoProveedores;
 use App\Models\Facturas;
+use App\Models\Notificaciones;
 use App\Models\OrdenCompra;
-use App\Models\OrdenCompraFiles;
+use App\Models\RecepcionAlmacen;
 use App\Models\ValidacionCanje;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Http;
@@ -538,7 +539,7 @@ class OrdenCompraController extends BaseController
                 ->value('telefono');
 
             $canjeIdEncriptado = $this->encriptarCorto($no_orden);
-            $urlva = env('APP_FRONT_URL') . "/validar-ordencompra/{$canjeIdEncriptado}";
+            $urlva = config('app.url_frontend') . "/validar-ordencompra/{$canjeIdEncriptado}";
 
             if ($estado === "cotizacion_enviada_a_proveedor") {
 
@@ -577,7 +578,7 @@ class OrdenCompraController extends BaseController
             $totalGeneral = collect($canje)->sum('importe_total');
             $totalIva = collect($canje)->sum('iva');
             $ordenIdEncriptado = $this->encriptarCorto($no_orden);
-            $urlva = env('APP_FRONT_URL') . "/validar-ordencompra/{$ordenIdEncriptado}";
+            $urlva = config('app.url_frontend') . "/validar-ordencompra/{$ordenIdEncriptado}";
 
             $productosData = (object)[
                 'productos' => $canje,
@@ -846,16 +847,29 @@ class OrdenCompraController extends BaseController
             }
 
             $orden_compra = OrdenCompra::find($request->id_orden_compra);
+            $proveedor = CatalogoProveedores::find($orden_compra->id_proveedor);
 
             if (!$orden_compra) {
                 DB::rollBack();
                 return $this->sendError('Esta orden de compra no existe', 'error', 404);
             }
 
+            if (!$proveedor) {
+                DB::rollBack();
+                return $this->sendError('No existe el proveedor', 'error', 404);
+            }
+
             $orden_compra->update([
                 'observaciones' => $request->observaciones,
                 'estatus' => 'cotizacion_validada_por_proveedor',
             ]);
+
+            $log['vista'] = 0;
+            $log['detalle'] = "El proveedor {$proveedor->nombre} envió a aprobación la orden {$orden_compra->no_orden}";
+            $log['id_tipo_notificacion'] = 1;
+            $log['id_usuario_creador'] = $orden_compra->id_proveedor;
+            $log['id_usuario_para'] = $orden_compra->id_usuario;
+            Notificaciones::create($log);
 
             DB::commit();
             return $this->sendResponse($orden_compra);
@@ -967,15 +981,86 @@ class OrdenCompraController extends BaseController
             }
 
             $orden_compra = OrdenCompra::find($request->id_orden_compra);
+            $proveedor = CatalogoProveedores::find($orden_compra->id_proveedor);
 
             if (!$orden_compra) {
                 DB::rollBack();
                 return $this->sendError('Esta orden de compra no existe', 'error', 404);
             }
 
+            if (!$proveedor) {
+                DB::rollBack();
+                return $this->sendError('No existe el proveedor', 'error', 404);
+            }
+
+            // Decodificar productos
+            $productosOrden = json_decode($orden_compra->productos_canje, true);
+
+            if (!$productosOrden || !is_array($productosOrden)) {
+                return $this->sendError('No se encontraron productos en la orden', null, 404);
+            }
+
+            $productosIds = array_keys($productosOrden);
+
+            // Obtener los datos completos de los productos desde dc_catalogo_productos
+            $canjesData = DB::table('dc_catalogo_productos as cdp')
+                ->select(
+                    'cdp.id',
+                    'cdp.sku',
+                    'cdp.created_at as creacion_canje',
+                    'vc.id as id_canje',
+                    'vc.estatus as estado_validacion',
+                    'vc.fecha_validacion',
+                    'cdp.nombre_producto as nombre_premio',
+                    'cdp.marca',
+                    'cdp.fee_brimagy',
+                    'cdp.costo_sin_iva',
+                    'cdp.costo_con_iva',
+                )
+                ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
+                ->whereIn('cdp.id', $productosIds)
+                ->get()
+                ->keyBy('id');
+
+            // Insertar cada producto en la tabla de recepción de almacén
+            foreach ($productosOrden as $idProducto => $productoOrden) {
+                $canjeData = $canjesData->get($idProducto);
+
+                if (!$canjeData) {
+                    continue;
+                }
+
+                // Solo guardar productos aceptados
+                if (isset($productoOrden['estatus_proveedor']) && $productoOrden['estatus_proveedor'] == 1) {
+                    $almacen = [
+                        'id_canje' => $productoOrden['id_canje'] ?? $canjeData->id_canje,
+                        'id_usuario' => $orden_compra->id_usuario,
+                        'id_producto' => $idProducto,
+                        'id_orden_compra' => $orden_compra->id,
+                        'cantidad_producto' => $productoOrden['cantidad_producto'] ?? $canjeData->cantidad_producto,
+                        'cantidad_almacen' => 0,
+                        'fecha' => now(),
+                        'comentarios' => "",
+                        'guia' => "",
+                        'cantidad' => $productoOrden['cantidad_producto'] ?? 1,
+                        'sku' => $productoOrden['sku'] ?? $canjeData->sku,
+                        'nombre_producto' => $productoOrden['nombre_producto'] ?? $canjeData->nombre_premio,
+                    ];
+
+                    RecepcionAlmacen::create($almacen);
+                }
+            }
+
             $orden_compra->update([
                 'estatus' => 'orden_validada_por_proveedor',
             ]);
+
+            $log['vista'] = 0;
+            $log['detalle'] = "El proveedor {$proveedor->nombre} ha validado la orden {$orden_compra->no_orden}";
+            $log['id_tipo_notificacion'] = 2;
+            $log['id_usuario_creador'] = $orden_compra->id_proveedor;
+            $log['id_usuario_para'] = $orden_compra->id_usuario;
+            Notificaciones::create($log);
 
             DB::commit();
             return $this->sendResponse('Orden de compra validada correctamente.');
@@ -1097,6 +1182,7 @@ class OrdenCompraController extends BaseController
                 'nombre_factura' => $nombreFactura,
                 'tipo_archivo' => $tipoArchivo,
                 'url_factura' => $rutaArchivo,
+                'estatus' => "sin_pagar",
             ]);
 
             $orden_compra = OrdenCompra::find($request->id_orden_compra);
