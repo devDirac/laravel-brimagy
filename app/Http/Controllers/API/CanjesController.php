@@ -328,7 +328,7 @@ class CanjesController extends BaseController
                 ->pluck('email')
                 ->toArray();
 
-            $canjeData = (object)[
+            $canjeData = (object) [
                 'folio' => $canje->folio,
                 'nombre_usuario' => $canje->name,
                 'email' => $canje->email,
@@ -398,7 +398,7 @@ class CanjesController extends BaseController
                     'cdp.id_proveedor',
                     DB::raw('(SELECT vc.estatus FROM dc_validacion_canje vc WHERE vc.id_canje = sp.id LIMIT 1) as estado_validacion')
                 )
-                ->leftJoin('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
+                ->join('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {
@@ -414,12 +414,21 @@ class CanjesController extends BaseController
             }
 
             // BÚSQUEDA POR FECHAS
-            if (($request->has('fecha1') && !empty($request->fecha1)) && ($request->has('fecha2') && !empty($request->fecha2))) {
-                $fecha1 = Carbon::parse($request->fecha1)->startOfDay();
-                $fecha2 = Carbon::parse($request->fecha2)->endOfDay();
-                // Ordenar para que siempre la menor sea el inicio
-                $inicio = $fecha1->lt($fecha2) ? $fecha1->startOfDay() : $fecha2->startOfDay();
-                $fin    = $fecha1->lt($fecha2) ? $fecha2->endOfDay()   : $fecha1->endOfDay();
+            if (
+                $request->has('fecha1') && !empty($request->fecha1) &&
+                $request->has('fecha2') && !empty($request->fecha2)
+            ) {
+
+                $fecha1 = Carbon::parse($request->fecha1);
+                $fecha2 = Carbon::parse($request->fecha2);
+
+                if ($fecha1->lt($fecha2)) {
+                    $inicio = $fecha1->copy()->startOfDay();
+                    $fin = $fecha2->copy()->endOfDay();
+                } else {
+                    $inicio = $fecha2->copy()->startOfDay();
+                    $fin = $fecha1->copy()->endOfDay();
+                }
 
                 $query->whereBetween('sp.created_at', [$inicio, $fin]);
             }

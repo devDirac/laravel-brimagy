@@ -332,9 +332,12 @@ class ProductosController extends BaseController
                     'cpt.total',
                     'cpt.puntos',
                     'cpt.factor',
+                    'cpt.tipo_producto',
+                    'p.nombre as nombre_plataforma',
                     'cpt.created_at as fecha_creacion',
                 )
                 ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_plataformas as p', 'cpt.id_plataforma', '=', 'p.id')
                 ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id');
 
             // BÚSQUEDA
@@ -354,12 +357,21 @@ class ProductosController extends BaseController
             }
 
             // BÚSQUEDA POR FECHAS
-            if (($request->has('fecha1') && !empty($request->fecha1)) && ($request->has('fecha2') && !empty($request->fecha2))) {
-                $fecha1 = Carbon::parse($request->fecha1)->startOfDay();
-                $fecha2 = Carbon::parse($request->fecha2)->endOfDay();
-                // Ordenar para que siempre la menor sea el inicio
-                $inicio = $fecha1->lt($fecha2) ? $fecha1->startOfDay() : $fecha2->startOfDay();
-                $fin    = $fecha1->lt($fecha2) ? $fecha2->endOfDay()   : $fecha1->endOfDay();
+            if (
+                $request->has('fecha1') && !empty($request->fecha1) &&
+                $request->has('fecha2') && !empty($request->fecha2)
+            ) {
+
+                $fecha1 = Carbon::parse($request->fecha1);
+                $fecha2 = Carbon::parse($request->fecha2);
+
+                if ($fecha1->lt($fecha2)) {
+                    $inicio = $fecha1->copy()->startOfDay();
+                    $fin    = $fecha2->copy()->endOfDay();
+                } else {
+                    $inicio = $fecha2->copy()->startOfDay();
+                    $fin    = $fecha1->copy()->endOfDay();
+                }
 
                 $query->whereBetween('cpt.created_at', [$inicio, $fin]);
             }
@@ -399,9 +411,12 @@ class ProductosController extends BaseController
                     'cpt.total',
                     'cpt.puntos',
                     'cpt.factor',
+                    'cpt.tipo_producto',
+                    'p.nombre as nombre_plataforma',
                     'cpt.created_at as fecha_creacion',
                 )
                 ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_plataformas as p', 'cpt.id_plataforma', '=', 'p.id')
                 ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id')
                 ->where('cpt.tipo_producto', '=', 'fisico');
 
@@ -466,9 +481,12 @@ class ProductosController extends BaseController
                     'cpt.total',
                     'cpt.puntos',
                     'cpt.factor',
+                    'cpt.tipo_producto',
+                    'p.nombre as nombre_plataforma',
                     'cpt.created_at as fecha_creacion',
                 )
                 ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_plataformas as p', 'cpt.id_plataforma', '=', 'p.id')
                 ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id')
                 ->where('cpt.tipo_producto', '=', 'digital');
 

@@ -65,7 +65,8 @@ class AlmacenController extends BaseController
                     'ra.comentarios',
                     'ra.estatus',
                     'ra.guia'
-                );
+                )
+                ->whereNot('ra.estatus', 'entregado');
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {

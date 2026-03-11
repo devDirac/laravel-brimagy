@@ -152,7 +152,6 @@ class ConfiguracionesController extends BaseController
                 'plataformas_sincronizadas' => $plataformasSincronizadas,
                 'productos_sincronizados' => $productosSincronizados,
             ], 'Sincronización completada exitosamente.');
-
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al sincronizar los productos', $th->getMessage(), 500);
@@ -172,6 +171,26 @@ class ConfiguracionesController extends BaseController
             if ($validator->fails()) {
                 DB::rollBack();
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $plataformaExiste = Plataformas::where('id', $request->id_plataforma)->first();
+
+            if ($plataformaExiste) {
+                $plataformaExiste->update([
+                    'nombre' => $request->nombre,
+                    'descripcion' => $request->descripcion,
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+
+                $user = Auth::user();
+                $log['evento'] = 'Actualización de plataforma';
+                $log['descripcion'] = "El usuario con id: {$user->id} actualizó la plataforma {$request->id_plataforma}";
+                $log['id_usuario'] = $user->id;
+                BitacoraEventos::create($log);
+
+                DB::commit();
+
+                return $this->sendResponse($plataformaExiste, 'Plataforma actualizada correctamente.');
             }
 
             $plataforma = Plataformas::create([
@@ -259,7 +278,6 @@ class ConfiguracionesController extends BaseController
                 'plataformas_desincronizadas' => $plataformasDesincronizadas,
                 'productos_desincronizados' => $productosDesincronizados,
             ]);
-
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener los productos no sincronizados', $th, 500);
         }
