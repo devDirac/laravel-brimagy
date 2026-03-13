@@ -38,6 +38,8 @@ Route::post('crearProveedor', [ProveedorController::class, 'crearProveedor'])->m
 Route::get('getProveedores', [ProveedorController::class, 'getProveedores'])->middleware($SANCTUM);
 Route::put('editarProveedor', [ProveedorController::class, 'editarProveedor'])->middleware($SANCTUM);
 Route::delete('eliminarProveedor', [ProveedorController::class, 'eliminarProveedor'])->middleware($SANCTUM);
+Route::put('asignarProveedor', [ProveedorController::class, 'asignarProveedor'])->middleware($SANCTUM);
+
 //CATEGORIAS
 Route::post('crearCategoria', [CategoriasController::class, 'crearCategoria'])->middleware($SANCTUM);
 Route::get('getCategorias', [CategoriasController::class, 'getCategorias'])->middleware($SANCTUM);
@@ -64,7 +66,7 @@ Route::post('solicitarCodigoValidacion', [CanjesController::class, 'solicitarCod
 Route::get('getCodigoVerificacionById', [CanjesController::class, 'getCodigoVerificacionById']);
 Route::get('getCanjeById', [CanjesController::class, 'getCanjeById']);
 Route::post('validarIdentidadPorCodigo', [CanjesController::class, 'validarIdentidadPorCodigo']);
-
+Route::post('enviarValidacionSinProveedor', [CanjesController::class, 'enviarValidacionSinProveedor'])->middleware($SANCTUM);
 //ORDEN DE COMPRA
 Route::get('getOCPorId', [OrdenCompraController::class, 'getOCPorId'])->middleware($SANCTUM);
 Route::get('getOCPorIdProveedor', [OrdenCompraController::class, 'getOCPorIdProveedor'])->middleware($SANCTUM);

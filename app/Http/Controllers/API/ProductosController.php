@@ -26,7 +26,7 @@ class ProductosController extends BaseController
                 'nombre_producto' => 'required|string',
                 'descripcion' => 'required|string',
                 'marca' => 'required|string',
-                'sku' => 'required|string',
+                'sku' => 'nullable|string',
                 'color' => 'nullable|string',
                 'talla' => 'nullable|string',
                 'costo_con_iva' => 'required|integer',
@@ -82,7 +82,12 @@ class ProductosController extends BaseController
             }
 
             // Verificar si ya existe un producto con ese SKU
-            $productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
+            $skuValido = !empty($request->sku) && strtoupper(trim($request->sku)) !== 'N/A';
+
+            $productoExistente = $skuValido
+                ? CatalogoProductos::where('sku', $request->sku)->first()
+                : null;
+            //$productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
 
             // Verificar si la plataforma tiene variables globales registradas
             $variables = VariablesGlobales::where('id_plataforma', $id_plataforma)->first();
@@ -268,9 +273,16 @@ class ProductosController extends BaseController
                 return $this->sendError('Formato de datos no válido', $validator->errors());
             }
 
-            $skusExistentes = CatalogoProductos::whereIn('sku', $request->skus)
-                ->pluck('sku')
-                ->toArray();
+            $skusValidos = array_filter($request->skus, function ($sku) {
+                return !empty($sku) && strtoupper(trim($sku)) !== 'N/A';
+            });
+
+            $skusExistentes = [];
+            if (!empty($skusValidos)) {
+                $skusExistentes = CatalogoProductos::whereIn('sku', $skusValidos)
+                    ->pluck('sku')
+                    ->toArray();
+            }
 
             return $this->sendResponse([
                 'skus_existentes' => $skusExistentes

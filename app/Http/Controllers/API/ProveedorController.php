@@ -8,7 +8,9 @@ use App\Http\Controllers\API\BaseController as BaseController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
+use App\Models\CatalogoProductos;
 use App\Models\CatalogoProveedores;
+use App\Models\ValidacionCanje;
 
 class ProveedorController extends BaseController
 {
@@ -182,6 +184,57 @@ class ProveedorController extends BaseController
             return $this->sendResponse($proveedores, 'Proveedores obtenidos exitosamente.');
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener los proveedores', $th, 500);
+        }
+    }
+    public function asignarProveedor(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_proveedor' => 'required|integer|exists:dc_catalogo_proveedores,id',
+                'id_validacion' => 'required|integer|exists:dc_validacion_canje,id',
+                'id_producto' => 'required|integer|exists:dc_catalogo_productos,id',
+            ]);
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+            $proveedor = CatalogoProveedores::find($request->id_proveedor);
+            if (!$proveedor) {
+                DB::rollBack();
+                return $this->sendError('Este proveedor no existe', [], 404);
+            }
+
+            $datosParaActualizar = $request->only([
+                'id_proveedor'
+            ]);
+            $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
+                return !is_null($value) && $value !== '';
+            });
+
+            $datosParaActualizar['updated_at'] = now()->setTimezone('America/Mexico_City');
+
+            $validacionCanje = ValidacionCanje::where('id', $request->id_validacion)
+                ->update($datosParaActualizar);
+            $producto = CatalogoProductos::where('id', $request->id_producto)
+                ->update($datosParaActualizar);
+
+            DB::commit();
+
+            $userLog = Auth::user();
+
+            BitacoraEventos::create([
+                'evento'      => 'Edición de producto',
+                'tabla'      => 'dc_catalogo_productos',
+                'id_referencia' => $request->id_producto,
+                'descripcion' => "Se asignó el proveedor {$proveedor->nombre} al producto",
+                'id_usuario'  => $userLog->id,
+            ]);
+
+            return $this->sendResponse("Se ha asignado el proveedor con éxito");
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al asignar el proveedor', $th, 500);
         }
     }
 }

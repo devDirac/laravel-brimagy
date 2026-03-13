@@ -86,6 +86,14 @@ class OrdenCompraController extends BaseController
                 ->filter()
                 ->toArray();
 
+            $sinProveedorCount = DB::table('dc_validacion_canje as vc')
+                ->whereNull('vc.id_proveedor')
+                ->where('vc.estatus', 'identidad_validada')
+                ->when(!empty($productosEnOrdenes), function ($q) use ($productosEnOrdenes) {
+                    $q->whereNotIn('vc.id_producto', $productosEnOrdenes);
+                })
+                ->count();
+
             $query = DB::table('dc_catalogo_proveedores as cp')
                 ->select(
                     'cp.id',
@@ -121,6 +129,21 @@ class OrdenCompraController extends BaseController
                 ->havingRaw('total_canjes > 0 OR total_ordenes_compra > 0')
                 ->orderByRaw('total_canjes DESC')
                 ->get();
+
+            // ✅ Agregar fila virtual para canjes sin proveedor
+            if ($sinProveedorCount > 0) {
+                $proveedores->prepend((object)[
+                    'id'               => null,
+                    'nombre'           => 'Sin proveedor',
+                    'razon_social'     => null,
+                    'descripcion'      => 'Canjes validados sin proveedor asignado',
+                    'nombre_contacto'  => null,
+                    'telefono'         => null,
+                    'correo'           => null,
+                    'total_canjes'     => $sinProveedorCount,
+                    'total_ordenes_compra' => 0,
+                ]);
+            }
 
             return $this->sendResponse($proveedores);
         } catch (\Throwable $th) {
@@ -300,28 +323,59 @@ class OrdenCompraController extends BaseController
     public function getCanjesPorProveedor(Request $request)
     {
         try {
-            $query = DB::table('dc_catalogo_productos as cdp')
-                ->select(
-                    'cdp.id',
-                    'vc.id as id_validacion_producto',
-                    'vc.id_canje',
-                    'cdp.sku',
-                    'cdp.created_at as creacion_producto',
-                    'vc.estatus as estado_validacion',
-                    'vc.fecha_validacion',
-                    'vc.cantidad_producto as number_of_awards',
-                    'cdp.id as id_producto',
-                    'cdp.nombre_producto as nombre_premio',
-                    'cdp.marca',
-                    'cp.nombre as nombre_proveedor',
-                    'cdp.fee_brimagy',
-                    'cp.razon_social',
-                    'cdp.costo_sin_iva',
-                )
-                ->leftJoin('dc_catalogo_proveedores as cp', 'cdp.id_proveedor', '=', 'cp.id')
-                ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
-                ->where('cp.id', $request->id_proveedor)
-                ->where('vc.estatus', '=', 'identidad_validada');
+            if (
+                !$request->has('id_proveedor') ||
+                $request->id_proveedor === null ||
+                $request->id_proveedor === 'null'
+            ) {
+                $query = DB::table('dc_catalogo_productos as cdp')
+                    ->select(
+                        'cdp.id',
+                        'vc.id as id_validacion_producto',
+                        'vc.id_canje',
+                        'cdp.sku',
+                        'cdp.id_proveedor',
+                        'cdp.created_at as creacion_producto',
+                        'vc.estatus as estado_validacion',
+                        'vc.fecha_validacion',
+                        'vc.cantidad_producto as number_of_awards',
+                        'cdp.id as id_producto',
+                        'cdp.nombre_producto as nombre_premio',
+                        'cdp.marca',
+                        DB::raw('NULL as nombre_proveedor'),
+                        'cdp.fee_brimagy',
+                        DB::raw('NULL as razon_social'),
+                        'cdp.costo_sin_iva',
+                    )
+                    ->leftJoin('dc_catalogo_proveedores as cp', 'cdp.id_proveedor', '=', 'cp.id')
+                    ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
+                    ->whereNull('cdp.id_proveedor')
+                    ->where('vc.estatus', '=', 'identidad_validada');
+            } else {
+                $query = DB::table('dc_catalogo_productos as cdp')
+                    ->select(
+                        'cdp.id',
+                        'vc.id as id_validacion_producto',
+                        'vc.id_canje',
+                        'cdp.sku',
+                        'cdp.id_proveedor',
+                        'cdp.created_at as creacion_producto',
+                        'vc.estatus as estado_validacion',
+                        'vc.fecha_validacion',
+                        'vc.cantidad_producto as number_of_awards',
+                        'cdp.id as id_producto',
+                        'cdp.nombre_producto as nombre_premio',
+                        'cdp.marca',
+                        'cp.nombre as nombre_proveedor',
+                        'cdp.fee_brimagy',
+                        'cp.razon_social',
+                        'cdp.costo_sin_iva',
+                    )
+                    ->leftJoin('dc_catalogo_proveedores as cp', 'cdp.id_proveedor', '=', 'cp.id')
+                    ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
+                    ->where('cp.id', $request->id_proveedor)
+                    ->where('vc.estatus', '=', 'identidad_validada');
+            }
 
             $canjes = $query->orderBy('cdp.created_at', 'desc')->get();
 
@@ -905,6 +959,64 @@ class OrdenCompraController extends BaseController
                 return $this->sendError('El proveedor no existe', 'error', 404);
             }
 
+            // Decodificar productos
+            $productosOrden = json_decode($orden_compra->productos_canje, true);
+
+            if (!$productosOrden || !is_array($productosOrden)) {
+                return $this->sendError('No se encontraron productos en la orden', null, 404);
+            }
+
+            $productosIds = array_keys($productosOrden);
+
+            // Obtener los datos completos de los productos desde dc_catalogo_productos
+            $canjesData = DB::table('dc_catalogo_productos as cdp')
+                ->select(
+                    'cdp.id',
+                    'cdp.sku',
+                    'cdp.created_at as creacion_canje',
+                    'vc.id as id_canje',
+                    'vc.estatus as estado_validacion',
+                    'vc.fecha_validacion',
+                    'cdp.nombre_producto as nombre_premio',
+                    'cdp.marca',
+                    'cdp.fee_brimagy',
+                    'cdp.costo_sin_iva',
+                    'cdp.costo_con_iva',
+                )
+                ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
+                ->whereIn('cdp.id', $productosIds)
+                ->get()
+                ->keyBy('id');
+
+            // Insertar cada producto en la tabla de recepción de almacén
+            foreach ($productosOrden as $idProducto => $productoOrden) {
+                $canjeData = $canjesData->get($idProducto);
+
+                if (!$canjeData) {
+                    continue;
+                }
+
+                // Solo guardar productos aceptados
+                if (isset($productoOrden['estatus_proveedor']) && $productoOrden['estatus_proveedor'] == 1) {
+                    $almacen = [
+                        'id_canje' => $productoOrden['id_canje'] ?? $canjeData->id_canje,
+                        'id_usuario' => $orden_compra->id_usuario,
+                        'id_producto' => $idProducto,
+                        'id_orden_compra' => $orden_compra->id,
+                        'cantidad_producto' => $productoOrden['cantidad_producto'] ?? $canjeData->cantidad_producto,
+                        'cantidad_almacen' => 0,
+                        'fecha' => now(),
+                        'comentarios' => "",
+                        'guia' => "",
+                        'cantidad' => $productoOrden['cantidad_producto'] ?? 1,
+                        'sku' => $productoOrden['sku'] ?? $canjeData->sku,
+                        'nombre_producto' => $productoOrden['nombre_producto'] ?? $canjeData->nombre_premio,
+                    ];
+
+                    RecepcionAlmacen::create($almacen);
+                }
+            }
+
             $orden_compra->update([
                 'estatus' => 'orden_compra_enviada_a_proveedor',
             ]);
@@ -991,64 +1103,6 @@ class OrdenCompraController extends BaseController
             if (!$proveedor) {
                 DB::rollBack();
                 return $this->sendError('No existe el proveedor', 'error', 404);
-            }
-
-            // Decodificar productos
-            $productosOrden = json_decode($orden_compra->productos_canje, true);
-
-            if (!$productosOrden || !is_array($productosOrden)) {
-                return $this->sendError('No se encontraron productos en la orden', null, 404);
-            }
-
-            $productosIds = array_keys($productosOrden);
-
-            // Obtener los datos completos de los productos desde dc_catalogo_productos
-            $canjesData = DB::table('dc_catalogo_productos as cdp')
-                ->select(
-                    'cdp.id',
-                    'cdp.sku',
-                    'cdp.created_at as creacion_canje',
-                    'vc.id as id_canje',
-                    'vc.estatus as estado_validacion',
-                    'vc.fecha_validacion',
-                    'cdp.nombre_producto as nombre_premio',
-                    'cdp.marca',
-                    'cdp.fee_brimagy',
-                    'cdp.costo_sin_iva',
-                    'cdp.costo_con_iva',
-                )
-                ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
-                ->whereIn('cdp.id', $productosIds)
-                ->get()
-                ->keyBy('id');
-
-            // Insertar cada producto en la tabla de recepción de almacén
-            foreach ($productosOrden as $idProducto => $productoOrden) {
-                $canjeData = $canjesData->get($idProducto);
-
-                if (!$canjeData) {
-                    continue;
-                }
-
-                // Solo guardar productos aceptados
-                if (isset($productoOrden['estatus_proveedor']) && $productoOrden['estatus_proveedor'] == 1) {
-                    $almacen = [
-                        'id_canje' => $productoOrden['id_canje'] ?? $canjeData->id_canje,
-                        'id_usuario' => $orden_compra->id_usuario,
-                        'id_producto' => $idProducto,
-                        'id_orden_compra' => $orden_compra->id,
-                        'cantidad_producto' => $productoOrden['cantidad_producto'] ?? $canjeData->cantidad_producto,
-                        'cantidad_almacen' => 0,
-                        'fecha' => now(),
-                        'comentarios' => "",
-                        'guia' => "",
-                        'cantidad' => $productoOrden['cantidad_producto'] ?? 1,
-                        'sku' => $productoOrden['sku'] ?? $canjeData->sku,
-                        'nombre_producto' => $productoOrden['nombre_producto'] ?? $canjeData->nombre_premio,
-                    ];
-
-                    RecepcionAlmacen::create($almacen);
-                }
             }
 
             $orden_compra->update([

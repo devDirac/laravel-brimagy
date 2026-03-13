@@ -15,10 +15,10 @@ return new class extends Migration {
             $table->string('nombre_producto');
             $table->string('descripcion');
             $table->string('marca');
-            $table->string('sku');
+            $table->string('sku')->nullable();
             $table->string('color')->nullable();
             $table->string('talla')->nullable();
-            $table->foreignId('id_proveedor')->constrained('dc_catalogo_proveedores')->onDelete('cascade');
+            $table->foreignId('id_proveedor')->nullable()->constrained('dc_catalogo_proveedores')->onDelete('cascade');
             $table->foreignId('id_catalogo')->constrained('dc_categoria_catalogo')->onDelete('cascade');
             $table->integer('costo_con_iva');
             $table->integer('costo_sin_iva');

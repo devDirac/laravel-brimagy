@@ -260,7 +260,7 @@ class CanjesController extends BaseController
 
         return $id;
     }
-    private function enviarWhatsApp($canje, $codigo = null, $validado = null)
+    private function enviarWhatsApp($canje, $codigo = null, $validado = null, $proveedor = null)
     {
         try {
             //conseguir los telefonos de todos los administradores
@@ -315,7 +315,7 @@ class CanjesController extends BaseController
         }
     }
 
-    private function enviarCorreo($canje, $codigo = null, $validado = null)
+    private function enviarCorreo($canje, $codigo = null, $validado = null, $proveedor = null)
     {
         try {
             $destinatarios = [
@@ -396,9 +396,22 @@ class CanjesController extends BaseController
                     'sp.status as estado_canje',
                     'cdp.id as id_producto',
                     'cdp.id_proveedor',
+                    'cdp.sku as sku_catalogo',
                     DB::raw('(SELECT vc.estatus FROM dc_validacion_canje vc WHERE vc.id_canje = sp.id LIMIT 1) as estado_validacion')
                 )
-                ->join('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
+                // ->leftJoin('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
+                ->leftJoin('dc_catalogo_productos as cdp', function ($join) {
+                    $join->on(function ($query) {
+                        // Caso 1: ambos tienen SKU válido y coinciden
+                        $query->whereRaw("sp.sku IS NOT NULL AND sp.sku != '' AND sp.sku != 'N/A'")
+                            ->whereColumn('sp.sku', '=', 'cdp.sku');
+                    })->orOn(function ($query) {
+                        // Caso 2: cdp NO tiene SKU → emparejar por nombre y talla
+                        $query->whereRaw("(cdp.sku IS NULL OR cdp.sku = '' OR cdp.sku = 'N/A')")
+                            ->whereRaw("TRIM(LOWER(sp.desc)) = TRIM(LOWER(cdp.nombre_producto))")
+                            ->whereRaw("TRIM(LOWER(sp.size)) = TRIM(LOWER(cdp.talla))");
+                    });
+                });
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {
@@ -591,6 +604,54 @@ class CanjesController extends BaseController
             return $this->sendResponse($validacion, 'Canje validado correctamente');
         } catch (\Throwable $th) {
             return $this->sendError('Error al validar el canje', $th->getMessage(), 500);
+        }
+    }
+
+    public function enviarValidacionSinProveedor(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $user = Auth::user();
+            $validacion = ValidacionCanje::create([
+                'id_canje' => $request->id,
+                'id_producto' => $request->id_producto,
+                'cantidad_producto' => $request->number_of_awards,
+                'id_proveedor' => $request->id_proveedor,
+                'id_usuario_admin' => $user->id,
+                'estatus' => 'identidad_validada',
+                'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
+            ]);
+
+            $canje = DB::table('swaps_view')
+                ->where('id', $request->id)
+                ->first();
+            $validado = true;
+
+            if ($validacion) {
+                $this->enviarWhatsApp($canje, null, $validado);
+                $this->enviarCorreo($canje, null, $validado);
+            }
+            $log['evento'] = 'Canje validado directamente';
+            $log['descripcion'] = "El usuario con id: {$user->id} validó el canje: {$canje->folio} sin proveedor";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($validacion, 'Validación realizada exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al validar', $th->getMessage(), 500);
         }
     }
 }
