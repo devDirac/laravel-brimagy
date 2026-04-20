@@ -16,12 +16,17 @@ return new class extends Migration
             $table->integer('id_canje');
             $table->integer('id_usuario');
             $table->integer('id_producto');
+            $table->integer('id_producto_nuevo')->nullable();
             $table->integer('id_orden_compra');
             $table->integer('cantidad_producto');
             $table->integer('cantidad_almacen')->nullable();
+            $table->integer('id_proveedor')->nullable();
+            $table->integer('precio_compra')->nullable();
             $table->date('fecha')->nullable();
             $table->string('comentarios')->nullable();
             $table->enum('estatus', ['con_detalles', 'por_recibir', 'en_almacen', 'en_almacen_parcialmente', 'guia_asignada', 'enviado', 'entregado'])->default('por_recibir');
+            $table->string('mei')->nullable();
+            $table->string('no_serie')->nullable();
             $table->string('guia')->nullable();
             $table->timestamps();
         });

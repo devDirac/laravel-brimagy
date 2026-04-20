@@ -2,18 +2,30 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Models\Colores;
+use App\Models\ColoresBrimagy;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoCategoria;
 use App\Models\CatalogoProductos;
 use App\Models\CatalogoProveedores;
+use App\Models\FotosOfertas;
+use App\Models\FotosOfertasBrimagy;
+use App\Models\FotosProducto;
+use App\Models\FotosProductoBrimagy;
 use App\Models\Plataformas;
+use App\Models\ProductoBrimagy;
+use App\Models\Tallas;
+use App\Models\TallasBrimagy;
+use App\Models\ValidacionCanje;
 use App\Models\VariablesGlobales;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 class ProductosController extends BaseController
 {
@@ -23,9 +35,10 @@ class ProductosController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
+                'id_producto_brimagy' => 'nullable',
                 'nombre_producto' => 'required|string',
-                'descripcion' => 'required|string',
-                'marca' => 'required|string',
+                'descripcion' => 'nullable|string',
+                'marca' => 'nullable|string',
                 'sku' => 'nullable|string',
                 'color' => 'nullable|string',
                 'talla' => 'nullable|string',
@@ -51,18 +64,25 @@ class ProductosController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $id_proveedor = $request->id_proveedor;
+            $id_proveedor = ($request->id_proveedor && $request->id_proveedor !== 'null')
+                ? $request->id_proveedor
+                : null;
+            $nombreUnico = "";
+            //$id_proveedor = $request->id_proveedor;
             $id_catalogo = $request->id_catalogo;
             $id_plataforma = $request->id_plataforma;
 
             if ($request->tipo_registro === 'excel') {
-                // Buscar proveedor por nombre
-                $proveedor = CatalogoProveedores::where('nombre', 'like', '%' . $request->proveedor . '%')->first();
-                if (!$proveedor) {
-                    DB::rollBack();
-                    return $this->sendError('El proveedor "' . $request->proveedor . '" no existe', 'error', 404);
+                if (empty($request->proveedor)) {
+                    $id_proveedor = $request->id_proveedor ?? null;
+                } else {
+                    $proveedor = CatalogoProveedores::where('nombre', 'like', '%' . $request->proveedor . '%')->first();
+                    if (!$proveedor) {
+                        DB::rollBack();
+                        return $this->sendError('El proveedor "' . $request->proveedor . '" no existe', 'error', 404);
+                    }
+                    $id_proveedor = $proveedor->id;
                 }
-                $id_proveedor = $proveedor->id;
 
                 // Buscar categoría por nombre
                 $catalogo = CatalogoCategoria::where('desc', 'like', '%' . $request->catalogo . '%')->first();
@@ -81,15 +101,8 @@ class ProductosController extends BaseController
                 $id_plataforma = $plataforma->id;
             }
 
-            // Verificar si ya existe un producto con ese SKU
-            $skuValido = !empty($request->sku) && strtoupper(trim($request->sku)) !== 'N/A';
+            $productoExistente = CatalogoProductos::where('id_producto_brimagy', $request->id_producto_brimagy)->first();
 
-            $productoExistente = $skuValido
-                ? CatalogoProductos::where('sku', $request->sku)->first()
-                : null;
-            //$productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
-
-            // Verificar si la plataforma tiene variables globales registradas
             $variables = VariablesGlobales::where('id_plataforma', $id_plataforma)->first();
 
             if (!$variables) {
@@ -119,20 +132,44 @@ class ProductosController extends BaseController
                 $factor = ($factor % 2 === 0) ? $factor + 1 : $factor;
             }
 
+            //Subir la foto
+            $nombreUnico = "";
+            $archivo = $request->file('foto_producto');
+
+            if ($request->tipo_registro === 'individual' && $archivo) {
+                $categoria = CatalogoCategoria::where('id', $request->id_catalogo)->first();
+
+                $nombreOriginal = $archivo->getClientOriginalName();
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreSinExtension = pathinfo($nombreOriginal, PATHINFO_FILENAME);
+                $nombreUnico = $nombreSinExtension . now()->format('Y-m-d_H_i_s') . '.' . $extension;
+            }
+
+            /*if ($request->tipo_registro === 'individual') {
+                $categoria = CatalogoCategoria::where('id', $request->id_catalogo)->first();
+                $archivo = $request->file('foto_producto');
+
+                $nombreOriginal = $archivo->getClientOriginalName();
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreSinExtension = pathinfo($nombreOriginal, PATHINFO_FILENAME);
+                $nombreUnico = $nombreSinExtension . '_' . now()->format('Y-m-d_H_i_s') . '.' . $extension;
+            }*/
+
             if ($productoExistente) {
+                $nombreUnico = $productoExistente->foto_producto;
                 // Guardar valores anteriores para la bitácora
                 $valoresAnteriores = [
-                    'fee_brimagy'          => $productoExistente->fee_brimagy,
-                    'envio_base'           => $productoExistente->envio_base,
-                    'costo_caja'           => $productoExistente->costo_caja,
-                    'envio_extra'          => $productoExistente->envio_extra,
-                    'subtotal'             => $productoExistente->subtotal,
-                    'total_envio'          => $productoExistente->total_envio,
-                    'total'                => $productoExistente->total,
-                    'puntos'               => $productoExistente->puntos,
-                    'factor'               => $productoExistente->factor,
-                    'costo_con_iva'        => $productoExistente->costo_con_iva,
-                    'costo_sin_iva'        => $productoExistente->costo_sin_iva,
+                    'fee_brimagy' => $productoExistente->fee_brimagy,
+                    'envio_base' => $productoExistente->envio_base,
+                    'costo_caja' => $productoExistente->costo_caja,
+                    'envio_extra' => $productoExistente->envio_extra,
+                    'subtotal' => $productoExistente->subtotal,
+                    'total_envio' => $productoExistente->total_envio,
+                    'total' => $productoExistente->total,
+                    'puntos' => $productoExistente->puntos,
+                    'factor' => $productoExistente->factor,
+                    'costo_con_iva' => $productoExistente->costo_con_iva,
+                    'costo_sin_iva' => $productoExistente->costo_sin_iva,
                     'costo_puntos_con_iva' => $productoExistente->costo_puntos_con_iva,
                     'costo_puntos_sin_iva' => $productoExistente->costo_puntos_sin_iva,
                 ];
@@ -143,27 +180,27 @@ class ProductosController extends BaseController
                 $envio_extra = $variables ? $variables->envio_extra : ($request->envio_extra ?? $productoExistente->envio_extra);
                 $costo_puntos_sin_iva = $request->costo_puntos_sin_iva ?? $productoExistente->costo_puntos_sin_iva;
 
-                $porcentaje    = (float) $fee_brimagy / 100;
+                $porcentaje = (float) $fee_brimagy / 100;
                 $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
-                $subtotal      = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio   = round($envio_base + $costo_caja + $envio_extra);
-                $total         = round($subtotal + $total_envio);
-                $puntos        = round($total + 1);
-                $factor        = round($puntos * 15);
+                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
+                $total_envio = round($envio_base + $costo_caja + $envio_extra);
+                $total = round($subtotal + $total_envio);
+                $puntos = round($total + 1);
+                $factor = round($puntos * 15);
                 $factor = ($factor % 2 === 0) ? $factor + 1 : $factor;
 
                 $valoresNuevos = [
-                    'fee_brimagy'          => $fee_brimagy,
-                    'envio_base'           => $envio_base,
-                    'costo_caja'           => $costo_caja,
-                    'envio_extra'          => $envio_extra,
-                    'subtotal'             => $subtotal,
-                    'total_envio'          => $total_envio,
-                    'total'                => $total,
-                    'puntos'               => $puntos,
-                    'factor'               => $factor,
-                    'costo_con_iva'        => $request->costo_con_iva,
-                    'costo_sin_iva'        => $request->costo_sin_iva,
+                    'fee_brimagy' => $fee_brimagy,
+                    'envio_base' => $envio_base,
+                    'costo_caja' => $costo_caja,
+                    'envio_extra' => $envio_extra,
+                    'subtotal' => $subtotal,
+                    'total_envio' => $total_envio,
+                    'total' => $total,
+                    'puntos' => $puntos,
+                    'factor' => $factor,
+                    'costo_con_iva' => $request->costo_con_iva,
+                    'costo_sin_iva' => $request->costo_sin_iva,
                     'costo_puntos_con_iva' => $request->costo_puntos_con_iva,
                     'costo_puntos_sin_iva' => $request->costo_puntos_sin_iva,
                 ];
@@ -178,30 +215,60 @@ class ProductosController extends BaseController
                 }
 
                 $productoExistente->update([
-                    'nombre_producto'      => $request->nombre_producto,
-                    'descripcion'          => $request->descripcion,
-                    'marca'                => $request->marca,
-                    'color'                => $request->color,
-                    'talla'                => $request->talla,
-                    'id_proveedor'         => $id_proveedor,
-                    'id_catalogo'          => $id_catalogo,
-                    'costo_con_iva'        => $request->costo_con_iva,
-                    'costo_sin_iva'        => $request->costo_sin_iva,
+                    'nombre_producto' => $request->nombre_producto,
+                    'descripcion' => $request->descripcion,
+                    'marca' => $request->marca,
+                    'color' => $request->color,
+                    'talla' => $request->talla,
+                    'id_proveedor' => $id_proveedor,
+                    'id_catalogo' => $id_catalogo,
+                    'costo_con_iva' => $request->costo_con_iva,
+                    'costo_sin_iva' => $request->costo_sin_iva,
                     'costo_puntos_con_iva' => $request->costo_puntos_con_iva,
                     'costo_puntos_sin_iva' => $request->costo_puntos_sin_iva,
-                    'fee_brimagy'          => $fee_brimagy,
-                    'subtotal'             => $subtotal,
-                    'envio_base'           => $envio_base,
-                    'costo_caja'           => $costo_caja,
-                    'envio_extra'          => $envio_extra,
-                    'total_envio'          => $total_envio,
-                    'total'                => $total,
-                    'puntos'               => $puntos,
-                    'factor'               => $factor,
-                    'id_plataforma'        => $id_plataforma,
-                    'tipo_producto'        => $request->tipo_producto,
-                    'updated_at'           => now()->setTimezone('America/Mexico_City'),
+                    'fee_brimagy' => $fee_brimagy,
+                    'subtotal' => $subtotal,
+                    'envio_base' => $envio_base,
+                    'costo_caja' => $costo_caja,
+                    'envio_extra' => $envio_extra,
+                    'total_envio' => $total_envio,
+                    'total' => $total,
+                    'puntos' => $puntos,
+                    'factor' => $factor,
+                    'foto_producto' => $nombreUnico,
+                    'id_producto_brimagy' => $request->id_producto_brimagy,
+                    'id_plataforma' => $id_plataforma,
+                    'tipo_producto' => $request->tipo_producto,
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
+
+                $producto_brimagy = ProductoBrimagy::find($productoExistente->id_producto_brimagy);
+                if (!$producto_brimagy) {
+                    DB::rollBack();
+                    return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
+                }
+
+                $producto_brimagy->update([
+                    'desc' => $request->nombre_producto,
+                    'required_score' => $puntos,
+                    'sub_category_id' => $request->id_catalogo,
+                    'photo_name' => $nombreUnico,
+                    'sku' => $request->sku,
+                ]);
+
+                if ($request->tipo_registro === 'individual' && $archivo) {
+                    $ruta = $archivo->storeAs(
+                        'fotos_producto/' . $request->id_producto,
+                        $nombreUnico,
+                        'private'
+                    );
+
+                    Storage::disk('ftp_brimagy')->put(
+                        $categoria->file_path . '/' . $nombreUnico,
+                        file_get_contents($archivo->getRealPath())
+                    );
+                }
+
 
                 $user = Auth::user();
                 $descripcionCambios = !empty($cambios)
@@ -209,16 +276,24 @@ class ProductosController extends BaseController
                     : "Sin cambios en valores numéricos";
 
                 BitacoraEventos::create([
-                    'evento'      => 'Edición de producto',
-                    'tabla'      => 'dc_catalogo_productos',
+                    'evento' => 'Edición de producto',
+                    'tabla' => 'dc_catalogo_productos',
                     'id_referencia' => $request->id_producto,
                     'descripcion' => "Se editó la siguiente información del producto: {$descripcionCambios}",
-                    'id_usuario'  => $user->id,
+                    'id_usuario' => $user->id,
                 ]);
 
                 DB::commit();
                 return $this->sendResponse($productoExistente, 'Producto actualizado exitosamente.');
             }
+
+            $producto_brimagy = ProductoBrimagy::create([
+                'desc' => $request->nombre_producto,
+                'required_score' => $puntos,
+                'sub_category_id' => $request->id_catalogo,
+                'photo_name' => $nombreUnico,
+                'sku' => $request->sku,
+            ]);
 
             $producto = CatalogoProductos::create([
                 'nombre_producto' => $request->nombre_producto,
@@ -242,9 +317,590 @@ class ProductosController extends BaseController
                 'total' => $total,
                 'puntos' => $puntos,
                 'factor' => $factor,
+                'foto_producto' => $nombreUnico,
+                'id_producto_brimagy' => $producto_brimagy->id,
                 'id_plataforma' => $id_plataforma,
                 'tipo_producto' => $request->tipo_producto,
             ]);
+
+            if ($request->tipo_registro === 'individual' && $archivo) {
+                $ruta = $archivo->storeAs(
+                    'fotos_producto/' . $producto->id,
+                    $nombreUnico,
+                    'private'
+                );
+
+                Storage::disk('ftp_brimagy')->put(
+                    $categoria->file_path . '/' . $nombreUnico,
+                    file_get_contents($archivo->getRealPath())
+                );
+            }
+
+            $user = Auth::user();
+            $log['evento'] = 'Creación de producto';
+            $log['descripcion'] = "El usuario con id: {$user->id} añadio el producto con id: {$producto->id} al catalogo";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($producto, 'Producto registrado exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al registrar el producto', $th->getMessage(), 500);
+        }
+    }
+    public function crearEditarColorProducto(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto_brimagy' => 'nullable|integer',
+                'id_producto_dirac' => 'nullable|integer',
+                'id_color_brimagy' => 'nullable|integer',
+                'id_color' => 'nullable|integer',
+                'color' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $colorExistente = Colores::where('id', $request->id_color)->first();
+            $colorExistenteBrimagy = ColoresBrimagy::where('id', $request->id_color_brimagy)->first();
+
+            if ($colorExistente) {
+
+                $colorExistenteNombre = Colores::where('color', $request->color)
+                    ->where('id_producto', $request->id_producto_dirac)
+                    ->first();
+                if ($colorExistenteNombre) {
+                    DB::rollBack();
+                    return $this->sendError('El color ' . $request->color . ' ya existe', 'error', 500);
+                }
+
+                $valoresAnteriores = [
+                    'color' => $colorExistente->color,
+                    'status' => $colorExistente->status,
+                ];
+                $valoresNuevos = [
+                    'color' => $request->color,
+                    'status' => $request->status,
+                ];
+
+                $colorExistente->update([
+                    'color' => $request->color,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+                $colorExistenteBrimagy->update([
+                    'color' => $request->color,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+
+                $user = Auth::user();
+                $cambios = [];
+                foreach ($valoresNuevos as $campo => $valorNuevo) {
+                    $valorAnterior = $valoresAnteriores[$campo];
+                    if ((string) $valorAnterior !== (string) $valorNuevo) {
+                        $cambios[] = "{$campo}: {$valorAnterior} → {$valorNuevo}";
+                    }
+                }
+                $descripcionCambios = !empty($cambios)
+                    ? implode(' | ', $cambios)
+                    : "Sin cambios";
+
+                BitacoraEventos::create([
+                    'evento' => 'Edición de producto',
+                    'tabla' => 'dc_colores_premio',
+                    'id_referencia' => $request->id_producto_dirac,
+                    'descripcion' => "Se editó la siguiente información del producto: {$descripcionCambios}",
+                    'id_usuario' => $user->id,
+                ]);
+
+                DB::commit();
+                return $this->sendResponse($colorExistente, 'Color editado exitosamente.');
+            }
+
+            $colorExistenteNombre = Colores::where('color', $request->color)
+                ->where('id_producto', $request->id_producto_dirac)
+                ->first();
+
+            if ($colorExistenteNombre) {
+                DB::rollBack();
+                return $this->sendError('El color ' . $request->color . ' ya existe', 'error', 500);
+            }
+
+            $productoBrimagy = ColoresBrimagy::create([
+                'award_id' => $request->id_producto_brimagy,
+                'color' => $request->color,
+                'status' => "ACTIVE",
+            ]);
+            $producto = Colores::create([
+                'id_producto' => $request->id_producto_dirac,
+                'id_color_brimagy' => $productoBrimagy->id,
+                'color' => $request->color,
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log['evento'] = 'Creación de color';
+            $log['id_referencia'] = $request->id_producto_dirac;
+            $log['descripcion'] = "El usuario con id: {$user->id} añadio el color con: {$request->color} al producto {$request->id_producto_dirac}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($producto, 'Color registrado exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al registrar el color', $th->getMessage(), 500);
+        }
+    }
+    public function getProductoColorPorId(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Falta el id del color.', $validator->errors());
+            }
+
+            $query = DB::table('dc_colores_premio as cp')
+                ->select(
+                    'cp.id',
+                    'cp.id_color_brimagy',
+                    'cp.color',
+                    'cp.status',
+                )
+                ->where('cp.id_producto', $request->id_producto);
+
+            $colores = $query->orderBy('cp.created_at', 'desc')->get();
+
+            return $this->sendResponse($colores);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener los colores', $th, 500);
+        }
+    }
+    public function desactivarColorProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_color' => 'required|integer',
+                'id_color_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $color = Colores::find($request->id_color);
+            $color_brimagy = ColoresBrimagy::find($request->id_color_brimagy);
+
+            if (!$color) {
+                DB::rollBack();
+                return $this->sendError('Este color no se encuentra', 'error', 404);
+            }
+            if (!$color_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Este color no se encuentra', 'error', 404);
+            }
+
+            $color->update([
+                'status' => "INACTIVE",
+            ]);
+            $color_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se desactivó un color de producto',
+                'descripcion' => "El usuario con id: {$user->id} desactivó el color {$color->color}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($color, 'Color desactivado correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al desactivar el color', $th->getMessage(), 500);
+        }
+    }
+    public function activarColorProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_color' => 'required|integer',
+                'id_color_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $color = Colores::find($request->id_color);
+            $color_brimagy = ColoresBrimagy::find($request->id_color_brimagy);
+
+            if (!$color) {
+                DB::rollBack();
+                return $this->sendError('Este color no se encuentra', 'error', 404);
+            }
+            if (!$color_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Este color no se encuentra', 'error', 404);
+            }
+
+            $color->update([
+                'status' => "ACTIVE",
+            ]);
+            $color_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se activó un color de producto',
+                'descripcion' => "El usuario con id: {$user->id} activó el color {$color->color}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($color, 'Color activado correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al activar el color', $th->getMessage(), 500);
+        }
+    }
+    //tallas
+    public function crearEditarTallaProducto(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto_brimagy' => 'nullable|integer',
+                'id_producto_dirac' => 'nullable|integer',
+                'id_talla_brimagy' => 'nullable|integer',
+                'id_talla' => 'nullable|integer',
+                'talla' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $tallaExistente = Tallas::where('id', $request->id_talla)->first();
+            $tallaExistenteBrimagy = TallasBrimagy::where('id', $request->id_talla_brimagy)->first();
+
+            if ($tallaExistente) {
+
+                $tallaExistenteNombre = Tallas::where('talla', $request->talla)
+                    ->where('id_producto', $request->id_producto_dirac)
+                    ->first();
+                if ($tallaExistenteNombre) {
+                    DB::rollBack();
+                    return $this->sendError('La talla ' . $request->talla . ' ya existe', 'error', 500);
+                }
+
+                $valoresAnteriores = [
+                    'talla' => $tallaExistente->color,
+                    'status' => $tallaExistente->status,
+                ];
+                $valoresNuevos = [
+                    'talla' => $request->color,
+                    'status' => $request->status,
+                ];
+
+                $tallaExistente->update([
+                    'talla' => $request->talla,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+                $tallaExistenteBrimagy->update([
+                    'size' => $request->talla,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+
+                $user = Auth::user();
+                $cambios = [];
+                foreach ($valoresNuevos as $campo => $valorNuevo) {
+                    $valorAnterior = $valoresAnteriores[$campo];
+                    if ((string) $valorAnterior !== (string) $valorNuevo) {
+                        $cambios[] = "{$campo}: {$valorAnterior} → {$valorNuevo}";
+                    }
+                }
+                $descripcionCambios = !empty($cambios)
+                    ? implode(' | ', $cambios)
+                    : "Sin cambios";
+
+                BitacoraEventos::create([
+                    'evento' => 'Edición de producto',
+                    'tabla' => 'dc_tallas_premio',
+                    'id_referencia' => $request->id_producto_dirac,
+                    'descripcion' => "Se editó la siguiente información del producto: {$descripcionCambios}",
+                    'id_usuario' => $user->id,
+                ]);
+
+                DB::commit();
+                return $this->sendResponse($tallaExistente, 'Talla editada exitosamente.');
+            }
+
+            $tallaExistenteNombre = Tallas::where('talla', $request->talla)
+                ->where('id_producto', $request->id_producto_dirac)
+                ->first();
+
+            if ($tallaExistenteNombre) {
+                DB::rollBack();
+                return $this->sendError('La talla ' . $request->talla . ' ya existe', 'error', 500);
+            }
+
+            $tallaBrimagy = TallasBrimagy::create([
+                'award_id' => $request->id_producto_brimagy,
+                'size' => $request->talla,
+                'status' => "ACTIVE",
+            ]);
+            $talla = Tallas::create([
+                'id_producto' => $request->id_producto_dirac,
+                'id_talla_brimagy' => $tallaBrimagy->id,
+                'talla' => $request->talla,
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log['evento'] = 'Creación de talla';
+            $log['id_referencia'] = $request->id_producto_dirac;
+            $log['descripcion'] = "El usuario con id: {$user->id} añadio la talla: {$request->talla} al producto {$request->id_producto_dirac}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($talla, 'Talla registrada exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al registrar la talla', $th->getMessage(), 500);
+        }
+    }
+    public function getProductoTallaPorId(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Falta el id de la talla.', $validator->errors());
+            }
+
+            $query = DB::table('dc_tallas_premio as tp')
+                ->select(
+                    'tp.id',
+                    'tp.id_talla_brimagy',
+                    'tp.talla',
+                    'tp.status',
+                )
+                ->where('tp.id_producto', $request->id_producto);
+
+            $tallas = $query->orderBy('tp.created_at', 'desc')->get();
+
+            return $this->sendResponse($tallas);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las tallas', $th, 500);
+        }
+    }
+    public function desactivarTallaProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_talla' => 'required|integer',
+                'id_talla_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $talla = Tallas::find($request->id_talla);
+            $talla_brimagy = TallasBrimagy::find($request->id_talla_brimagy);
+
+            if (!$talla) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
+            if (!$talla_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
+
+            $talla->update([
+                'status' => "INACTIVE",
+            ]);
+            $talla_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se desactivó una talla de producto',
+                'descripcion' => "El usuario con id: {$user->id} desactivó la talla {$talla->talla}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($talla, 'Talla desactivada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al desactivar la talla', $th->getMessage(), 500);
+        }
+    }
+    public function activarTallaProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_talla' => 'required|integer',
+                'id_talla_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $talla = Tallas::find($request->id_talla);
+            $talla_brimagy = TallasBrimagy::find($request->id_talla_brimagy);
+
+            if (!$talla) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
+            if (!$talla_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
+
+            $talla->update([
+                'status' => "ACTIVE",
+            ]);
+            $talla_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se activó una talla de producto',
+                'descripcion' => "El usuario con id: {$user->id} activó la talla {$talla->talla}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($talla, 'Talla activada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al activar la talla', $th->getMessage(), 500);
+        }
+    }
+    public function registrarNuevoPrecio(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'costo_sin_iva' => 'required|integer',
+                'id_producto' => 'required|integer',
+                'id_validacion' => 'required|integer',
+                'id_proveedor' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $datosProducto = CatalogoProductos::where('id', $request->id_producto)->first();
+
+            //datos del producto existente
+            $nombre_producto = $datosProducto->nombre_producto;
+            $descripcion = $datosProducto->descripcion;
+            $marca = $datosProducto->marca;
+            $sku = $datosProducto->sku;
+            $color = $datosProducto->color;
+            $talla = $datosProducto->talla;
+            $id_proveedor = $request->id_proveedor;
+            $id_catalogo = $datosProducto->id_catalogo;
+            $costo_con_iva = round($request->costo_sin_iva * 1.16);
+            $costo_sin_iva = $request->costo_sin_iva;
+            $costo_puntos_con_iva = $datosProducto->costo_puntos_con_iva;
+            $costo_puntos_sin_iva = $datosProducto->costo_puntos_sin_iva;
+            $fee_brimagy = $datosProducto->fee_brimagy;
+            $subtotal = $datosProducto->subtotal;
+            $envio_base = $datosProducto->envio_base;
+            $costo_caja = $datosProducto->costo_caja;
+            $envio_extra = $datosProducto->envio_extra;
+            $total_envio = $datosProducto->total_envio;
+            $total = $datosProducto->total;
+            $puntos = $datosProducto->puntos;
+            $factor = $datosProducto->factor;
+            $id_plataforma = $datosProducto->id_plataforma;
+            $tipo_producto = $datosProducto->tipo_producto;
+
+            $producto = CatalogoProductos::create([
+                'nombre_producto' => $nombre_producto,
+                'descripcion' => $descripcion,
+                'marca' => $marca,
+                'sku' => $sku,
+                'color' => $color,
+                'talla' => $talla,
+                'id_proveedor' => $id_proveedor,
+                'id_catalogo' => $id_catalogo,
+                'costo_con_iva' => $costo_con_iva,
+                'costo_sin_iva' => $costo_sin_iva,
+                'costo_puntos_con_iva' => $costo_puntos_con_iva,
+                'costo_puntos_sin_iva' => $costo_puntos_sin_iva,
+                'fee_brimagy' => $fee_brimagy,
+                'subtotal' => $subtotal,
+                'envio_base' => $envio_base,
+                'costo_caja' => $costo_caja,
+                'envio_extra' => $envio_extra,
+                'total_envio' => $total_envio,
+                'total' => $total,
+                'puntos' => $puntos,
+                'factor' => $factor,
+                'id_plataforma' => $id_plataforma,
+                'tipo_producto' => $tipo_producto,
+            ]);
+
+            $datosParaActualizar = [
+                'id_producto' => $producto->id,
+                'id_proveedor' => $id_proveedor ?? null,
+                'updated_at' => now()->setTimezone('America/Mexico_City'),
+            ];
+
+            $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
+                return !is_null($value) && $value !== '';
+            });
+
+            $validacionCanje = ValidacionCanje::where('id', $request->id_validacion)
+                ->update($datosParaActualizar);
 
             $user = Auth::user();
             $log['evento'] = 'Creación de producto';
@@ -286,6 +942,37 @@ class ProductosController extends BaseController
 
             return $this->sendResponse([
                 'skus_existentes' => $skusExistentes
+            ]);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al verificar SKUs', $th->getMessage(), 500);
+        }
+    }
+
+    public function verificarIdProductoBrimagy(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'ids' => 'required|array',
+                'ids.*' => 'string'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Formato de datos no válido', $validator->errors());
+            }
+
+            $idValidos = array_filter($request->ids, function ($id) {
+                return !empty($id) && strtoupper(trim($id)) !== 'N/A';
+            });
+
+            $idsExistentes = [];
+            if (!empty($idValidos)) {
+                $idsExistentes = CatalogoProductos::whereIn('id_producto_brimagy', $idValidos)
+                    ->pluck('id_producto_brimagy')
+                    ->toArray();
+            }
+
+            return $this->sendResponse([
+                'ids_existentes' => $idsExistentes
             ]);
         } catch (\Throwable $th) {
             return $this->sendError('Error al verificar SKUs', $th->getMessage(), 500);
@@ -344,13 +1031,18 @@ class ProductosController extends BaseController
                     'cpt.total',
                     'cpt.puntos',
                     'cpt.factor',
+                    'cpt.foto_producto',
+                    'cpt.id_producto_brimagy',
                     'cpt.tipo_producto',
                     'p.nombre as nombre_plataforma',
                     'cpt.created_at as fecha_creacion',
                 )
                 ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
                 ->leftJoin('dc_plataformas as p', 'cpt.id_plataforma', '=', 'p.id')
-                ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id');
+                ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id')
+                ->when($request->tipo_producto && $request->tipo_producto !== 'todos', function ($q) use ($request) {
+                    $q->where('cpt.tipo_producto', $request->tipo_producto);
+                });
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {
@@ -379,10 +1071,10 @@ class ProductosController extends BaseController
 
                 if ($fecha1->lt($fecha2)) {
                     $inicio = $fecha1->copy()->startOfDay();
-                    $fin    = $fecha2->copy()->endOfDay();
+                    $fin = $fecha2->copy()->endOfDay();
                 } else {
                     $inicio = $fecha2->copy()->startOfDay();
-                    $fin    = $fecha1->copy()->endOfDay();
+                    $fin = $fecha1->copy()->endOfDay();
                 }
 
                 $query->whereBetween('cpt.created_at', [$inicio, $fin]);
@@ -453,7 +1145,7 @@ class ProductosController extends BaseController
                 $fecha2 = Carbon::parse($request->fecha2)->endOfDay();
                 // Ordenar para que siempre la menor sea el inicio
                 $inicio = $fecha1->lt($fecha2) ? $fecha1->startOfDay() : $fecha2->startOfDay();
-                $fin    = $fecha1->lt($fecha2) ? $fecha2->endOfDay()   : $fecha1->endOfDay();
+                $fin = $fecha1->lt($fecha2) ? $fecha2->endOfDay() : $fecha1->endOfDay();
 
                 $query->whereBetween('cpt.created_at', [$inicio, $fin]);
             }
@@ -523,7 +1215,7 @@ class ProductosController extends BaseController
                 $fecha2 = Carbon::parse($request->fecha2)->endOfDay();
                 // Ordenar para que siempre la menor sea el inicio
                 $inicio = $fecha1->lt($fecha2) ? $fecha1->startOfDay() : $fecha2->startOfDay();
-                $fin    = $fecha1->lt($fecha2) ? $fecha2->endOfDay()   : $fecha1->endOfDay();
+                $fin = $fecha1->lt($fecha2) ? $fecha2->endOfDay() : $fecha1->endOfDay();
 
                 $query->whereBetween('cpt.created_at', [$inicio, $fin]);
             }
@@ -596,6 +1288,7 @@ class ProductosController extends BaseController
                 'total',
                 'puntos',
                 'factor',
+                'foto_producto',
             ]);
 
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
@@ -614,40 +1307,98 @@ class ProductosController extends BaseController
             $camposQueRecalculan = ['fee_brimagy', 'envio_base', 'costo_caja', 'envio_extra', 'costo_puntos_sin_iva'];
             $debeRecalcular = count(array_intersect($camposQueRecalculan, array_keys($datosParaActualizar))) > 0;
 
-            if ($debeRecalcular) {
-                // Mezclar valores actuales con los nuevos para tener todos los datos
-                $fee_brimagy  = $datosParaActualizar['fee_brimagy'] ?? $producto->fee_brimagy;
-                $envio_base   = $datosParaActualizar['envio_base'] ?? $producto->envio_base;
-                $costo_caja   = $datosParaActualizar['costo_caja'] ?? $producto->costo_caja;
-                $envio_extra  = $datosParaActualizar['envio_extra'] ?? $producto->envio_extra;
-                $costo_puntos_sin_iva = $datosParaActualizar['costo_puntos_sin_iva'] ?? $producto->costo_puntos_sin_iva;
-
-                $porcentaje    = (float) $fee_brimagy / 100;
-                $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
-                $subtotal      = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio   = round($envio_base + $costo_caja + $envio_extra);
-                $total         = round($subtotal + $total_envio);
-                $puntos        = round($total + 1);
-                $factor        = round($puntos * 15);
-                $factor = ($factor % 2 === 0) ? $factor + 1 : $factor;
-
-                // Sobreescribir con los recalculados
-                $datosParaActualizar['subtotal']    = $subtotal;
-                $datosParaActualizar['total_envio'] = $total_envio;
-                $datosParaActualizar['total']       = $total;
-                $datosParaActualizar['puntos']      = $puntos;
-                $datosParaActualizar['factor']      = $factor;
+            // Buscar plataforma y variables
+            $plataforma = Plataformas::where('nombre', $request->nombre_plataforma)->first();
+            if (!$plataforma) {
+                DB::rollBack();
+                return $this->sendError('La plataforma "' . $request->nombre_plataforma . '" no existe', 'error', 404);
             }
 
+            $variables = VariablesGlobales::where('id_plataforma', $plataforma->id)->first();
+            $costo_puntos_sin_iva = $request->costo_puntos_sin_iva ?? $producto->costo_puntos_sin_iva;
+
+            if ($variables) {
+                $fee_brimagy = $variables->fee_brimagy;
+                $envio_base = $variables->envio_base;
+                $costo_caja = $variables->costo_caja;
+                $envio_extra = $variables->envio_extra;
+            } else {
+                $fee_brimagy = $request->fee_brimagy ?? $producto->fee_brimagy;
+                $envio_base = $request->envio_base ?? $producto->envio_base;
+                $costo_caja = $request->costo_caja ?? $producto->costo_caja;
+                $envio_extra = $request->envio_extra ?? $producto->envio_extra;
+            }
+
+            $costo_puntos_con_iva = round((float) $costo_puntos_sin_iva * 1.16);
+            $porcentaje = (float) $fee_brimagy / 100;
+            $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
+            $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
+            $total_envio = round($envio_base + $costo_caja + $envio_extra);
+            $total = round($subtotal + $total_envio);
+            $puntos = round($total + 1);
+            $factor = round($puntos * 15);
+            $factor = ($factor % 2 === 0) ? $factor + 1 : $factor;
+
+            //Subir la foto
+            $nombreUnico = $producto->foto_producto;
+            $archivo = $request->file('foto_producto');
+
+            if ($archivo) {
+                $categoria = CatalogoCategoria::where('id', $request->id_catalogo)->first();
+
+                $nombreOriginal = $archivo->getClientOriginalName();
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreSinExtension = pathinfo($nombreOriginal, PATHINFO_FILENAME);
+                $nombreUnico = $nombreSinExtension . now()->format('Y-m-d_H_i_s') . '.' . $extension;
+
+                $archivo->storeAs(
+                    'fotos_producto/' . $request->id_producto,
+                    $nombreUnico,
+                    'private'
+                );
+
+                Storage::disk('ftp_brimagy')->put(
+                    $categoria->file_path . '/' . $nombreUnico,
+                    file_get_contents($archivo->getRealPath())
+                );
+
+                $datosParaActualizar['foto_producto'] = $nombreUnico;
+            }
+
+            $datosParaActualizar['fee_brimagy'] = $fee_brimagy;
+            $datosParaActualizar['envio_base'] = $envio_base;
+            $datosParaActualizar['costo_caja'] = $costo_caja;
+            $datosParaActualizar['envio_extra'] = $envio_extra;
+
+            $datosParaActualizar['costo_puntos_con_iva'] = $costo_puntos_con_iva;
+            $datosParaActualizar['subtotal'] = $subtotal;
+            $datosParaActualizar['total_envio'] = $total_envio;
+            $datosParaActualizar['total'] = $total;
+            $datosParaActualizar['puntos'] = $puntos;
+            $datosParaActualizar['factor'] = $factor;
             $datosParaActualizar['updated_at'] = now()->setTimezone('America/Mexico_City');
 
             $producto->update($datosParaActualizar);
+
+            $producto_brimagy = ProductoBrimagy::find($request->id_producto_brimagy);
+            if (!$producto_brimagy) {
+                DB::rollBack();
+                return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
+            }
+
+            $producto_brimagy->update([
+                'desc' => $request->nombre_producto,
+                'required_score' => $puntos,
+                'sub_category_id' => $request->id_catalogo,
+                'photo_name' => $nombreUnico,
+                'sku' => $request->sku,
+            ]);
 
             // Detectar cambios para la bitácora
             $cambios = [];
             foreach ($camposAuditables as $campo) {
                 $anterior = $valoresAnteriores[$campo] ?? null;
-                $nuevo    = $datosParaActualizar[$campo] ?? null;
+                $nuevo = $datosParaActualizar[$campo] ?? null;
                 if ($nuevo !== null && (string) $anterior !== (string) $nuevo) {
                     $cambios[] = "{$campo}: {$anterior} → {$nuevo}";
                 }
@@ -660,7 +1411,7 @@ class ProductosController extends BaseController
             $userLog = Auth::user();
             BitacoraEventos::create([
                 'evento' => 'Edición de producto',
-                'tabla'      => 'dc_catalogo_productos',
+                'tabla' => 'dc_catalogo_productos',
                 'id_referencia' => $request->id_producto,
                 'descripcion' => "Se editó la siguiente información del producto: {$descripcionCambios}",
                 'id_usuario' => $userLog->id,
@@ -670,7 +1421,13 @@ class ProductosController extends BaseController
             return $this->sendResponse("Se ha actualizado el producto con éxito");
         } catch (\Throwable $th) {
             DB::rollBack();
-            return $this->sendError('Error al actualizar el producto', $th, 500);
+            //return $this->sendError('Error al actualizar el producto', $th, 500);
+            return response()->json([
+                'error' => 'Ocurrió un error',
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
         }
     }
     public function eliminarProducto(Request $request)
@@ -739,16 +1496,20 @@ class ProductosController extends BaseController
                     'cpt.total',
                     'cpt.puntos',
                     'cpt.factor',
+                    'cpt.tipo_producto',
+                    'p.nombre as nombre_plataforma',
                     'cpt.created_at as fecha_creacion',
                 )
                 ->leftJoin('awards_categories as ac', 'cpt.id_catalogo', '=', 'ac.id')
+                ->leftJoin('dc_plataformas as p', 'cpt.id_plataforma', '=', 'p.id')
                 ->leftJoin('dc_catalogo_proveedores as cpv', 'cpt.id_proveedor', '=', 'cpv.id');
 
             // BÚSQUEDA POR PUNTOS CON RANGO
             if ($request->has('puntos') && !empty($request->puntos)) {
                 $puntos = (int) $request->puntos;
-                $rangoMinimo = $puntos - 200;
-                $rangoMaximo = $puntos + 200;
+                $porcentaje = $puntos * .20;
+                $rangoMinimo = $puntos - $porcentaje;
+                $rangoMaximo = $puntos + $porcentaje;
 
                 $query->whereBetween('cpt.puntos', [$rangoMinimo, $rangoMaximo]);
             }
@@ -758,9 +1519,6 @@ class ProductosController extends BaseController
                 $categoria = $request->categoria;
                 $query->where('ac.id', '=', $categoria);
             }
-
-            // ORDENAR POR TOTAL DE MANERA ASCENDENTE (menor a mayor)
-            //$productos = $query->orderBy('cpt.total', 'asc')->get();
 
             $productos = $query->orderBy('cpt.created_at', 'desc')->get();
 
@@ -797,6 +1555,424 @@ class ProductosController extends BaseController
             return $this->sendResponse($productos);
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener los productos', $th, 500);
+        }
+    }
+    public function getCatalogoProductosDigitalesBrimagy(Request $request)
+    {
+        try {
+            //$prueba = DB::connection('mysql_brimagy')->table('awards')->get()->all();
+            $query = DB::connection('mysql_brimagy')->table('awards_view as av')
+                ->select(
+                    'av.id',
+                    'av.desc as nombre_producto',
+                    /*'cdp.descripcion',
+                    'cdp.marca',*/
+                    'av.sku',
+                    /*'cdp.color',
+                    'cdp.talla',
+                    'cpv.nombre as proveedor',*/
+                    'av.category as catalogo',
+                    /*'cdp.costo_con_iva',
+                    'cdp.costo_sin_iva',
+                    'cdp.costo_puntos_con_iva',*/
+                    'av.required_score as costo_puntos_sin_iva',
+                    /*'cdp.fee_brimagy',
+                    'cdp.subtotal',
+                    'cdp.envio_base',
+                    'cdp.costo_caja',
+                    'cdp.envio_extra',
+                    'cdp.total_envio',
+                    'cdp.total',
+                    'cdp.puntos',
+                    'cdp.factor',
+                    'cdp.tipo_producto',
+                    'p.nombre as nombre_plataforma',*/
+                    'av.created_at as fecha_creacion',
+                )
+                ->where('av.status', 'ACTIVE');
+
+            $productos = $query->orderBy('av.created_at', 'desc')->get();
+
+            return $this->sendResponse($productos);
+            //return $this->sendResponse($prueba);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener los productos', $th, 500);
+        }
+    }
+    //fotos del producto
+    public function subirFotosProducto(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id_producto' => 'required',
+            'id_producto_brimagy' => 'nullable',
+            'fotos_producto' => 'required|array',
+            'fotos_producto.*' => 'required|file|mimes:jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            foreach ($request->file('fotos_producto') as $archivo) {
+                $nombreOriginal = $archivo->getClientOriginalName();
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreUnico = time() . '_' . uniqid() . '.' . $extension;
+
+                $rutaPrueba = 'fotos_prueba/' . $nombreUnico;
+
+                $ruta = $archivo->storeAs(
+                    'fotos_producto/' . $request->id_producto,
+                    $nombreUnico,
+                    'private'
+                );
+
+                $contenidoArchivo = file_get_contents($archivo->getRealPath());
+                Storage::disk('ftp_brimagy')->put($rutaPrueba, $contenidoArchivo);
+
+                //Storage::disk('ftp_externo')->put($rutaRelativa, $contenidoArchivo);
+                $fotoDirac = FotosProductoBrimagy::create([
+                    'award_id' => $request->id_producto_brimagy,
+                    'photo' => $nombreOriginal,
+                    'status' => "ACTIVE",
+                ]);
+
+                FotosProducto::create([
+                    'id_producto' => $request->id_producto,
+                    'id_foto_brimagy' => $fotoDirac->id,
+                    'nombre' => $nombreUnico,
+                    'nombre_original' => $nombreOriginal,
+                    'url_foto' => $ruta,
+
+                ]);
+            }
+
+            $fotos = FotosProducto::where('id_producto', $request->id_producto)->get();
+
+            return $this->sendResponse($fotos, 'Fotos subidas correctamente');
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir las fotos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getProductoFotoPorId(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Falta el id del producto.', $validator->errors());
+            }
+
+            $query = DB::table('dc_fotos_producto as fp')
+                ->select(
+                    'fp.id',
+                    'fp.id_producto',
+                    'fp.id_foto_brimagy',
+                    'fp.nombre',
+                    'fp.nombre_original',
+                    'fp.url_foto',
+                    'fp.status',
+                )
+                ->where('fp.id_producto', $request->id_producto);
+
+            $fotos = $query->orderBy('fp.created_at', 'desc')->get();
+
+            return $this->sendResponse($fotos);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las fotos', $th, 500);
+        }
+    }
+    public function desactivarFotosProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_foto' => 'required|integer',
+                'id_foto_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $foto = FotosProducto::find($request->id_foto);
+            $foto_brimagy = FotosProductoBrimagy::find($request->id_foto_brimagy);
+
+            if (!$foto) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+            if (!$foto_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+
+            $foto->update([
+                'status' => "INACTIVE",
+            ]);
+            $foto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se desactivó una foto de producto',
+                'descripcion' => "El usuario con id: {$user->id} desactivó la foto {$foto->nombre}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($foto, 'Foto desactivada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al desactivar la foto', $th->getMessage(), 500);
+        }
+    }
+    public function activarFotosProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_foto' => 'required|integer',
+                'id_foto_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $foto = FotosProducto::find($request->id_foto);
+            $foto_brimagy = FotosProductoBrimagy::find($request->id_foto_brimagy);
+
+            if (!$foto) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+            if (!$foto_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+
+            $foto->update([
+                'status' => "ACTIVE",
+            ]);
+            $foto_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se activó una foto de producto',
+                'descripcion' => "El usuario con id: {$user->id} activó la foto {$foto->nombre}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($foto, 'Foto activada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al activar la foto', $th->getMessage(), 500);
+        }
+    }
+    //fotos promo del producto
+    public function subirFotosPromoProducto(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id_producto' => 'required',
+            'id_producto_brimagy' => 'nullable',
+            'fotos_promo_producto' => 'required|array',
+            'fotos_promo_producto.*' => 'required|file|mimes:jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            foreach ($request->file('fotos_promo_producto') as $archivo) {
+                $nombreOriginal = $archivo->getClientOriginalName();
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreUnico = time() . '_' . uniqid() . '.' . $extension;
+
+                $rutaPrueba = 'Ofertas/' . $nombreUnico;
+
+                $ruta = $archivo->storeAs(
+                    'fotos_promo_producto/' . $request->id_producto,
+                    $nombreUnico,
+                    'private'
+                );
+
+                $contenidoArchivo = file_get_contents($archivo->getRealPath());
+                Storage::disk('ftp_brimagy')->put($rutaPrueba, $contenidoArchivo);
+
+                //Storage::disk('ftp_externo')->put($rutaRelativa, $contenidoArchivo);
+                $fotoDirac = FotosOfertasBrimagy::create([
+                    'award_id' => $request->id_producto_brimagy,
+                    'offer' => $nombreOriginal,
+                    'status' => "ACTIVE",
+                ]);
+
+                FotosOfertas::create([
+                    'id_producto' => $request->id_producto,
+                    'id_foto_promo_brimagy' => $fotoDirac->id,
+                    'nombre' => $nombreUnico,
+                    'nombre_original' => $nombreOriginal,
+                    'url_foto' => $ruta,
+
+                ]);
+            }
+
+            $fotos = FotosOfertas::where('id_producto', $request->id_producto)->get();
+
+            return $this->sendResponse($fotos, 'Fotos subidas correctamente');
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir las fotos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getProductoFotoPromoPorId(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_producto' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Falta el id del producto.', $validator->errors());
+            }
+
+            $query = DB::table('dc_fotos_promo_producto as fpp')
+                ->select(
+                    'fpp.id',
+                    'fpp.id_producto',
+                    'fpp.id_foto_promo_brimagy',
+                    'fpp.nombre',
+                    'fpp.nombre_original',
+                    'fpp.url_foto',
+                    'fpp.status',
+                )
+                ->where('fpp.id_producto', $request->id_producto);
+
+            $fotos = $query->orderBy('fpp.created_at', 'desc')->get();
+
+            return $this->sendResponse($fotos);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las fotos', $th, 500);
+        }
+    }
+    public function desactivarFotosPromoProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_foto_promo' => 'required|integer',
+                'id_foto_promo_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $foto = FotosOfertas::find($request->id_foto_promo);
+            $foto_brimagy = FotosOfertasBrimagy::find($request->id_foto_promo_brimagy);
+
+            if (!$foto) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+            if (!$foto_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+
+            $foto->update([
+                'status' => "INACTIVE",
+            ]);
+            $foto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se desactivó una foto de producto',
+                'descripcion' => "El usuario con id: {$user->id} desactivó la foto {$foto->nombre}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($foto, 'Foto desactivada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al desactivar la foto', $th->getMessage(), 500);
+        }
+    }
+    public function activarFotosPromoProducto(Request $request)
+    {
+        DB::beginTransaction();
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_foto_promo' => 'required|integer',
+                'id_foto_promo_brimagy' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $foto = FotosOfertas::find($request->id_foto_promo);
+            $foto_brimagy = FotosOfertasBrimagy::find($request->id_foto_promo_brimagy);
+
+            if (!$foto) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+            if (!$foto_brimagy) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
+
+            $foto->update([
+                'status' => "ACTIVE",
+            ]);
+            $foto_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log = [
+                'evento' => 'Se activó una foto de producto',
+                'descripcion' => "El usuario con id: {$user->id} activó la foto {$foto->nombre}",
+                'id_usuario' => $user->id,
+            ];
+            BitacoraEventos::create($log);
+
+            DB::commit();
+            return $this->sendResponse($foto, 'Foto activada correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al activar la foto', $th->getMessage(), 500);
         }
     }
 }

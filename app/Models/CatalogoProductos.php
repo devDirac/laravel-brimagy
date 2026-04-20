@@ -15,8 +15,10 @@ class CatalogoProductos extends Model
         'marca',
         'sku',
         'color',
+        'talla',
         'id_proveedor',
         'id_catalogo',
+        'id_producto_dirac',
         'costo_con_iva',
         'costo_sin_iva',
         'costo_puntos_con_iva',
@@ -30,6 +32,8 @@ class CatalogoProductos extends Model
         'total',
         'puntos',
         'factor',
+        'foto_producto',
+        'id_producto_brimagy',
         'id_plataforma',
         'tipo_producto'
     ];

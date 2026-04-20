@@ -13,12 +13,17 @@ class RecepcionAlmacen extends Model
         'id_canje',
         'id_usuario',
         'id_producto',
+        'id_producto_nuevo',
         'id_orden_compra',
         'cantidad_producto',
         'cantidad_almacen',
+        'id_proveedor',
+        'precio_compra',
         'fecha',
         'comentarios',
         'estatus',
+        'imei',
+        'no_serie',
         'guia',
     ];
 

@@ -50,13 +50,33 @@ Route::post('crearProducto', [ProductosController::class, 'crearProducto'])->mid
 Route::get('getCatalogoProductos', [ProductosController::class, 'getCatalogoProductos'])->middleware($SANCTUM);
 Route::get('getCatalogoProductosFisicos', [ProductosController::class, 'getCatalogoProductosFisicos'])->middleware($SANCTUM);
 Route::get('getCatalogoProductosDigitales', [ProductosController::class, 'getCatalogoProductosDigitales'])->middleware($SANCTUM);
-Route::put('editarProducto', [ProductosController::class, 'editarProducto'])->middleware($SANCTUM);
+Route::post('editarProducto', [ProductosController::class, 'editarProducto'])->middleware($SANCTUM);
 Route::delete('eliminarProducto', [ProductosController::class, 'eliminarProducto'])->middleware($SANCTUM);
 Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->middleware($SANCTUM);
 Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
 Route::get('busquedaInteligenteBrimagy', [ProductosController::class, 'busquedaInteligenteBrimagy'])->middleware($SANCTUM);
 Route::get('getBitacoraProductoPorId', [ProductosController::class, 'getBitacoraProductoPorId'])->middleware($SANCTUM);
-
+Route::get('verificarIdProductoBrimagy', [ProductosController::class, 'verificarIdProductoBrimagy'])->middleware($SANCTUM);
+//COLORES PRODUCTO
+Route::post('crearEditarColorProducto', [ProductosController::class, 'crearEditarColorProducto'])->middleware($SANCTUM);
+Route::get('getProductoColorPorId', [ProductosController::class, 'getProductoColorPorId'])->middleware($SANCTUM);
+Route::put('activarColorProducto', [ProductosController::class, 'activarColorProducto'])->middleware($SANCTUM);
+Route::put('desactivarColorProducto', [ProductosController::class, 'desactivarColorProducto'])->middleware($SANCTUM);
+//TALLAS PRODUCTO
+Route::post('crearEditarTallaProducto', [ProductosController::class, 'crearEditarTallaProducto'])->middleware($SANCTUM);
+Route::get('getProductoTallaPorId', [ProductosController::class, 'getProductoTallaPorId'])->middleware($SANCTUM);
+Route::put('activarTallaProducto', [ProductosController::class, 'activarTallaProducto'])->middleware($SANCTUM);
+Route::put('desactivarTallaProducto', [ProductosController::class, 'desactivarTallaProducto'])->middleware($SANCTUM);
+//FOTOS DEL PRODUCTO
+Route::post('subirFotosProducto', [ProductosController::class, 'subirFotosProducto'])->middleware($SANCTUM);
+Route::get('getProductoFotoPorId', [ProductosController::class, 'getProductoFotoPorId'])->middleware($SANCTUM);
+Route::put('activarFotosProducto', [ProductosController::class, 'activarFotosProducto'])->middleware($SANCTUM);
+Route::put('desactivarFotosProducto', [ProductosController::class, 'desactivarFotosProducto'])->middleware($SANCTUM);
+//FOTOS PROMO DEL PRODUCTO
+Route::post('subirFotosPromoProducto', [ProductosController::class, 'subirFotosPromoProducto'])->middleware($SANCTUM);
+Route::get('getProductoFotoPromoPorId', [ProductosController::class, 'getProductoFotoPromoPorId'])->middleware($SANCTUM);
+Route::put('activarFotosPromoProducto', [ProductosController::class, 'activarFotosPromoProducto'])->middleware($SANCTUM);
+Route::put('desactivarFotosPromoProducto', [ProductosController::class, 'desactivarFotosPromoProducto'])->middleware($SANCTUM);
 //CATALOGO CANJES
 Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SANCTUM);
 
@@ -88,8 +108,8 @@ Route::put('addFechaPagoFactura', [FacturasController::class, 'addFechaPagoFactu
 
 //MANDAR PRODUCTO A OTRO PROVEEDOR
 Route::get('getProductoNuevoProveedor', [ProveedorController::class, 'getProductoNuevoProveedor'])->middleware($SANCTUM);
+Route::post('registrarNuevoPrecio', [ProductosController::class, 'registrarNuevoPrecio'])->middleware($SANCTUM);
 Route::put('enviarANuevoProveedor', [OrdenCompraController::class, 'enviarANuevoProveedor'])->middleware($SANCTUM);
-
 //ALMACEN DE PRODUCTOS
 Route::get('getProductosAlmacen', [AlmacenController::class, 'getProductosAlmacen'])->middleware($SANCTUM);
 Route::get('getProductoAlmacenPorId', [AlmacenController::class, 'getProductoAlmacenPorId'])->middleware($SANCTUM);
@@ -97,6 +117,8 @@ Route::put('recibirProductoAlmacen', [AlmacenController::class, 'recibirProducto
 Route::put('addGuiaProductoAlmacen', [AlmacenController::class, 'addGuiaProductoAlmacen'])->middleware($SANCTUM);
 Route::put('enviarProductoAlmacen', [AlmacenController::class, 'enviarProductoAlmacen'])->middleware($SANCTUM);
 Route::put('confirmarRecepcionProductoAlmacen', [AlmacenController::class, 'confirmarRecepcionProductoAlmacen'])->middleware($SANCTUM);
+Route::post('registrarNuevoPrecioAlmacen', [AlmacenController::class, 'registrarNuevoPrecioAlmacen'])->middleware($SANCTUM);
+Route::put('registrarMeiNoSerie', [AlmacenController::class, 'registrarMeiNoSerie'])->middleware($SANCTUM);
 
 //EVIDENCIAS DE ALMACEN DE PRODUCTOS
 Route::post('subirEvidencias', [EvidenciasController::class, 'subirEvidencias'])->middleware($SANCTUM);
@@ -129,5 +151,8 @@ Route::post('crearVariablesGlobales', [ConfiguracionesController::class, 'crearV
 Route::post('crearPlataforma', [ConfiguracionesController::class, 'crearPlataforma'])->middleware($SANCTUM);
 Route::get('getVariablesGlobales', [ConfiguracionesController::class, 'getVariablesGlobales'])->middleware($SANCTUM);
 Route::get('getPlataformas', [ConfiguracionesController::class, 'getPlataformas'])->middleware($SANCTUM);
-Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware(middleware: $SANCTUM);
-Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware(middleware: $SANCTUM);
+Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware($SANCTUM);
+Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware($SANCTUM);
+
+//QUERYS DE LA BASE DE DATOS DE BRIMAGY
+Route::get('getCatalogoProductosDigitalesBrimagy', [ProductosController::class, 'getCatalogoProductosDigitalesBrimagy'])->middleware($SANCTUM);

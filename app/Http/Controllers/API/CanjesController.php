@@ -85,6 +85,9 @@ class CanjesController extends BaseController
 
             // Verificar si ya existe un producto con ese SKU
             $productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
+            if (!$productoExistente) {
+                $productoExistente = CatalogoProductos::where('nombre_producto', $request->nombre_producto)->first();
+            }
 
             if ($productoExistente) {
                 // Si existe, actualizarlo
@@ -402,23 +405,24 @@ class CanjesController extends BaseController
                 // ->leftJoin('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
                 ->leftJoin('dc_catalogo_productos as cdp', function ($join) {
                     $join->on(function ($query) {
-                        // Caso 1: ambos tienen SKU válido y coinciden
+                        // Ambos tienen SKU válido y coinciden
                         $query->whereRaw("sp.sku IS NOT NULL AND sp.sku != '' AND sp.sku != 'N/A'")
                             ->whereColumn('sp.sku', '=', 'cdp.sku');
                     })->orOn(function ($query) {
-                        // Caso 2: cdp NO tiene SKU → emparejar por nombre y talla
+                        // NO tiene SKU = emparejar por nombre y talla
                         $query->whereRaw("(cdp.sku IS NULL OR cdp.sku = '' OR cdp.sku = 'N/A')")
                             ->whereRaw("TRIM(LOWER(sp.desc)) = TRIM(LOWER(cdp.nombre_producto))")
                             ->whereRaw("TRIM(LOWER(sp.size)) = TRIM(LOWER(cdp.talla))");
                     });
-                });
+                })
+                ->where('cdp.tipo_producto', $request->tipo_producto);
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.name', 'LIKE', "%{$search}%")
+                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
                         ->orWhere('sp.email', 'LIKE', "%{$search}%")
                         ->orWhere('sp.sku', 'LIKE', "%{$search}%")
                         ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")

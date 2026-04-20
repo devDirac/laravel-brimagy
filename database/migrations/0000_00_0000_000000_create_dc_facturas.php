@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('dc_facturas', function (Blueprint $table) {
             $table->id();
             $table->foreignId('id_orden_compra')->constrained('dc_orden_compra')->onDelete('cascade');
-            $table->foreignId('id_proveedor')->constrained('dc_catalogo_proveedores')->onDelete('cascade');
+            $table->integer('id_proveedor')->nullable();
             $table->foreignId('id_usuario')->constrained('users')->onDelete('cascade');
             $table->string('nombre_factura');
             $table->string('tipo_archivo');
