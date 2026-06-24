@@ -89,6 +89,8 @@ Route::post('subirFotoMonto', [ProductosController::class, 'subirFotoMonto'])->m
 Route::get('getFotoMontoPorId', [ProductosController::class, 'getFotoMontoPorId'])->middleware($SANCTUM);
 Route::put('activarFotoMonto', [ProductosController::class, 'activarFotoMonto'])->middleware($SANCTUM);
 Route::put('desactivarFotoMonto', [ProductosController::class, 'desactivarFotoMonto'])->middleware($SANCTUM);
+Route::get('verificarIdProductoBrimagy', [ProductosController::class, 'verificarIdProductoBrimagy'])->middleware($SANCTUM);
+
 //CATALOGO CANJES
 Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SANCTUM);
 
@@ -163,8 +165,8 @@ Route::post('crearVariablesGlobales', [ConfiguracionesController::class, 'crearV
 Route::post('crearPlataforma', [ConfiguracionesController::class, 'crearPlataforma'])->middleware($SANCTUM);
 Route::get('getVariablesGlobales', [ConfiguracionesController::class, 'getVariablesGlobales'])->middleware($SANCTUM);
 Route::get('getPlataformas', [ConfiguracionesController::class, 'getPlataformas'])->middleware($SANCTUM);
-Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware($SANCTUM);
-Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware($SANCTUM);
 
 //QUERYS DE LA BASE DE DATOS DE BRIMAGY
 Route::get('getCatalogoProductosDigitalesBrimagy', [ProductosController::class, 'getCatalogoProductosDigitalesBrimagy'])->middleware($SANCTUM);
+Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware($SANCTUM);
+Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware($SANCTUM);
