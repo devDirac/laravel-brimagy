@@ -11,7 +11,8 @@ class CatalogoCategoria extends Model
     protected $table = 'awards_categories';
     protected $fillable = [
         'desc',
-        'status'
+        'status',
+        'file_path',
     ];
 
     protected $casts = [

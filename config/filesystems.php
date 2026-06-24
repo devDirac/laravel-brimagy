@@ -66,6 +66,18 @@ return [
             'visibility' => 'private',
         ],
 
+        'ftp_brimagy' => [
+            'driver'   => 'ftp',
+            'host'     => env('FTP_HOST'),
+            'username' => env('FTP_USERNAME'),
+            'password' => env('FTP_PASSWORD'),
+            'port'     => (int) env('FTP_PORT', 21),
+            'root'     => env('FTP_ROOT', '/'),
+            'passive'  => true,
+            'ssl'      => false,
+            'timeout'  => 30,
+        ],
+
     ],
 
     /*
@@ -80,7 +92,9 @@ return [
     */
 
     'links' => [
-        //public_path('compartida') => storage_path('app/private/compartida'),
+        public_path('foto_monto') => storage_path('app/private/foto_monto'),
+        public_path('fotos_promo_producto') => storage_path('app/private/fotos_promo_producto'),
+        public_path('fotos_producto') => storage_path('app/private/fotos_producto'),
         public_path('facturas') => storage_path('app/private/facturas'),
         public_path('evidencias') => storage_path('app/private/evidencias'),
     ],

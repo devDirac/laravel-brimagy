@@ -18,7 +18,7 @@
 
         h2 {
             color: #2c3e50;
-            border-bottom: 2px solid #eb2fa5;
+            border-bottom: 2px solid #00506E;
             padding-bottom: 10px;
         }
 
@@ -43,14 +43,14 @@
         .codigo {
             font-size: 18px;
             font-weight: bold;
-            color: #eb2fa5;
+            color: #00506E;
             text-align: center;
             padding: 10px;
         }
 
         .codigo b {
             font-size: 24px;
-            color: #a5eb2f;
+            color: #000;
         }
 
         .footer {
@@ -58,12 +58,21 @@
             font-size: 14px;
             margin-top: 20px;
         }
+
+        .header {
+            background: linear-gradient(180deg, rgba(0, 181, 225, 1) 0%, rgba(0, 132, 171, 1) 100%);
+            padding: 15px 0;
+            text-align: center
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h2>Código de verificación de identidad</h2>
+        <div class="header">
+            <img src="http://201.149.0.141:8081/img/logo.png" alt="" width="150">
+        </div>
+        <h2 style="text-align:center;color:#00506E">Código de verificación de identidad</h2>
 
         <p>Ha solicitado un código para verificar su identidad, ingresa a la web y coloca el siguiente código para verificarte:</p>
 
