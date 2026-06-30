@@ -17,8 +17,8 @@
         }
 
         h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #eb2fa5;
+            color: #00506E;
+            border-bottom: 2px solid #00506E;
             padding-bottom: 10px;
         }
 
@@ -30,20 +30,20 @@
 
         td {
             padding: 4px;
-            border: 1px solid #eb2fa5;
+            border: 1px solid #00506E;
         }
 
         .label {
             background-color: #f5f5f5;
             font-weight: bold;
             width: 40%;
-            color: #eb2fa5;
+            color: #00506E;
         }
 
         .codigo {
             font-size: 18px;
             font-weight: bold;
-            color: #eb2fa5;
+            color: #00506E;
             text-align: center;
             padding: 10px;
         }
@@ -58,12 +58,21 @@
             font-size: 14px;
             margin-top: 20px;
         }
+
+        .header {
+            background: linear-gradient(180deg, rgba(0, 181, 225, 1) 0%, rgba(0, 132, 171, 1) 100%);
+            padding: 15px 0;
+            text-align: center
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h2>Nueva cotización recibida #000</h2>
+        <div class="header">
+            <img src="http://201.149.0.141:8081/img/logo.png" alt="" width="150">
+        </div>
+        <h2>Nueva cotización recibida</h2>
 
         <p>Ha recibido una nueva cotización para su aprobación en la página de Brimagy,
             favor de acceder a través de la siguiente web:</p>

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoCategoria;
+use App\Models\SubCategoria;
 
 class CategoriasController extends BaseController
 {
@@ -19,7 +20,7 @@ class CategoriasController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
-                //'descripcion' => 'required|string',
+                'category_id' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -27,9 +28,9 @@ class CategoriasController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $producto = CatalogoCategoria::create([
+            $producto = SubCategoria::create([
                 'desc' => $request->nombre,
-                //'descripcion' => $request->descripcion,
+                'category_id' => $request->category_id,
             ]);
 
             $user = Auth::user();
@@ -46,10 +47,20 @@ class CategoriasController extends BaseController
             return $this->sendError('Error al registrar la categoría', $th->getMessage(), 500);
         }
     }
-    public function getCategorias()
+    public function getCategoriasPrincipal()
     {
         try {
             $categorias = CatalogoCategoria::get();
+
+            return $this->sendResponse($categorias);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las categorías', $th, 500);
+        }
+    }
+    public function getCategorias()
+    {
+        try {
+            $categorias = SubCategoria::get();
 
             return $this->sendResponse($categorias);
         } catch (\Throwable $th) {
@@ -62,22 +73,22 @@ class CategoriasController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'id' => 'required|integer|exists:awards_categories,id'
+                'id' => 'required|integer',
+                'id_category' => 'required|integer',
             ]);
             if ($validator->fails()) {
                 DB::rollBack();
                 return $this->sendError('Falta el id de la categoría.', $validator->errors());
             }
-            $categoria = CatalogoCategoria::find($request->id);
+            $categoria = SubCategoria::find($request->id);
             if (!$categoria) {
                 DB::rollBack();
                 return $this->sendError('Esta categoria no existe', [], 404);
             }
 
-            // Preparar datos a actualizar
             $datosParaActualizar = $request->only([
                 'desc',
-                //'descripcion'
+                'id_category'
             ]);
 
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
@@ -86,7 +97,7 @@ class CategoriasController extends BaseController
 
             $datosParaActualizar['updated_at'] = now()->setTimezone('America/Mexico_City');
 
-            $categoriaActualizada = CatalogoCategoria::where('id', $request->id)
+            $categoriaActualizada = SubCategoria::where('id', $request->id)
                 ->update($datosParaActualizar);
 
             DB::commit();
@@ -108,7 +119,7 @@ class CategoriasController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'id' => 'required|integer|exists:awards_categories,id'
+                'id' => 'required|integer'
             ]);
 
             if ($validator->fails()) {
@@ -116,19 +127,59 @@ class CategoriasController extends BaseController
                 return $this->sendError('Falta el id de la categoria.', $validator->errors());
             }
 
-            $categoria = CatalogoCategoria::find($request->id);
+            $categoria = SubCategoria::find($request->id);
 
             if (!$categoria) {
                 DB::rollBack();
                 return $this->sendError('Esta categoria no existe', [], 404);
             }
 
-            // Eliminar la categoria
-            $categoria->delete();
+            $categoria->update([
+                'status' => "INACTIVE",
+            ]);
 
             $user = Auth::user();
             $log['evento'] = 'Eliminación de categoria';
-            $log['descripcion'] = "El usuario con id: {$user->id} eliminó una categoría";
+            $log['descripcion'] = "El usuario con id: {$user->id} desactivó una categoría";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse('Categoría eliminada exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al eliminar la categoría', $th->getMessage(), 500);
+        }
+    }
+    public function reactivarCategoria(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('Falta el id de la categoria.', $validator->errors());
+            }
+
+            $categoria = SubCategoria::find($request->id);
+
+            if (!$categoria) {
+                DB::rollBack();
+                return $this->sendError('Esta categoria no existe', [], 404);
+            }
+
+            $categoria->update([
+                'status' => "ACTIVE",
+            ]);
+
+            $user = Auth::user();
+            $log['evento'] = 'Reactivación de categoria';
+            $log['descripcion'] = "El usuario con id: {$user->id} reactivó una categoría";
             $log['id_usuario'] = $user->id;
             BitacoraEventos::create($log);
 

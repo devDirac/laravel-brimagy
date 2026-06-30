@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('dc_montos_digital', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('id_producto')->constrained('dc_catalogo_productos')->onDelete('cascade');
+            $table->integer('id_monto_brimagy');
+            $table->string('monto');
+            $table->integer('puntos');
+            $table->string('descripcion')->nullable();
+            $table->enum('status', ['ACTIVE', 'INACTIVE'])->default('ACTIVE');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('dc_montos_digital');
+    }
+};

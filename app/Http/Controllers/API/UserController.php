@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Models\UserBrimagy;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -62,6 +63,7 @@ class UserController extends BaseController
                 'id',
                 'name',
                 'email',
+                'phone',
                 'status',
                 'tipo_usuario',
             )->orderBy('id', 'desc')->get();
@@ -92,7 +94,7 @@ class UserController extends BaseController
             $dataToUpdate = $request->only([
                 'name',
                 'email',
-                'telefono',
+                'phone',
                 'foto'
             ]);
 
@@ -105,6 +107,13 @@ class UserController extends BaseController
 
             $usuarioActualizado = User::where('id', $request->id_usuario)
                 ->update($dataToUpdate);
+            //actualizar de la base de datos de brimagy
+            $usuarioBrimagy = UserBrimagy::where('id', $request->id_usuario)
+                ->update($dataToUpdate);
+            if (!$usuarioBrimagy) {
+                DB::rollBack();
+                return $this->sendError('Este usuario no existe en la base Brimagy', [], 404);
+            }
 
             DB::commit();
 
@@ -135,6 +144,15 @@ class UserController extends BaseController
             }
             $user->status = 'ACTIVE';
             $user->save();
+            //se activa en brimagy
+            $userBrimagy = UserBrimagy::find($request->id);
+
+            if (!$userBrimagy) {
+                return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
+            }
+
+            $userBrimagy->status = 'ACTIVE';
+            $userBrimagy->save();
 
             $userLog = Auth::user();
             $log['evento'] = 'Se actualizo el estatus de usuario';
@@ -163,6 +181,16 @@ class UserController extends BaseController
             }
             $user->status = 'DEACTIVATE';
             $user->save();
+
+            //se desactiva en brimagy
+            $userBrimagy = UserBrimagy::find($request->id);
+
+            if (!$userBrimagy) {
+                return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
+            }
+
+            $userBrimagy->status = 'DEACTIVATE';
+            $userBrimagy->save();
 
             $userLog = Auth::user();
             $log['evento'] = 'Se actualizo el estatus de usuario';

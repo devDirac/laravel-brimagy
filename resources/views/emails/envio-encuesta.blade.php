@@ -17,8 +17,8 @@
         }
 
         h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #eb2fa5;
+            color: #00506E;
+            border-bottom: 2px solid #00506E;
             padding-bottom: 10px;
         }
 
@@ -30,20 +30,20 @@
 
         td {
             padding: 4px;
-            border: 1px solid #eb2fa5;
+            border: 1px solid #00506E;
         }
 
         .label {
             background-color: #f5f5f5;
             font-weight: bold;
             width: 40%;
-            color: #eb2fa5;
+            color: #00506E;
         }
 
         .codigo {
             font-size: 18px;
             font-weight: bold;
-            color: #eb2fa5;
+            color: #00506E;
             text-align: center;
             padding: 10px;
         }
@@ -58,12 +58,21 @@
             font-size: 14px;
             margin-top: 20px;
         }
+
+        .header {
+            background: linear-gradient(180deg, rgba(0, 181, 225, 1) 0%, rgba(0, 132, 171, 1) 100%);
+            padding: 15px 0;
+            text-align: center
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h4>¡Hola, {{ $orden->nombre_usuario }}! Confirmamos que tu premio ha sido entregado con éxito. ✅</h4>
+        <div class="header">
+            <img src="http://201.149.0.141:8081/img/logo.png" alt="" width="150">
+        </div>
+        <h4 style="text-align:center;color:#00506E">¡Hola, {{ $orden->nombre_usuario }}! Confirmamos que tu premio ha sido entregado con éxito. ✅</h4>
 
         <p>Para asegurarnos de que todo salió perfecto, te invitamos a completar esta encuesta de {{ $orden->encuesta }}:</p>
         <br>

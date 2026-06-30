@@ -12,9 +12,6 @@ use App\Mail\SolicitarCodigo;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
-use App\Models\CatalogoCategoria;
-use App\Models\CatalogoProductos;
-use App\Models\CatalogoProveedores;
 use App\Models\ValidacionCanje;
 use App\Mail\ValidacionCanjeEnviada;
 use App\Models\User;
@@ -28,136 +25,6 @@ class CanjesController extends BaseController
     public function __construct()
     {
         $this->whatsappService = new WhatsAppService();
-    }
-
-    public function validarCanje(Request $request)
-    {
-        DB::beginTransaction();
-
-        try {
-            $validator = Validator::make($request->all(), [
-                'nombre_producto' => 'required|string',
-                'descripcion' => 'required|string',
-                'marca' => 'required|string',
-                'sku' => 'required|string',
-                'color' => 'required|string',
-                'costo_con_iva' => 'required|integer',
-                'costo_sin_iva' => 'required|integer',
-                'costo_puntos_con_iva' => 'required|integer',
-                'costo_puntos_sin_iva' => 'required|integer',
-                'fee_brimagy' => 'required|integer',
-                'subtotal' => 'required|integer',
-                'envio_base' => 'required|integer',
-                'costo_caja' => 'required|integer',
-                'envio_extra' => 'required|integer',
-                'total_envio' => 'required|integer',
-                'total' => 'required|integer',
-                'puntos' => 'required|integer',
-                'factor' => 'required|integer',
-                'tipo_registro' => 'required|string',
-            ]);
-
-            if ($validator->fails()) {
-                DB::rollBack();
-                return $this->sendError('El formato de datos no es válido.', $validator->errors());
-            }
-
-            $id_proveedor = $request->id_proveedor;
-            $id_catalogo = $request->id_catalogo;
-
-            if ($request->tipo_registro === 'excel') {
-                // Buscar proveedor por nombre
-                $proveedor = CatalogoProveedores::where('nombre', 'like', '%' . $request->proveedor . '%')->first();
-                if (!$proveedor) {
-                    DB::rollBack();
-                    return $this->sendError('El proveedor "' . $request->proveedor . '" no existe', 'error', 404);
-                }
-                $id_proveedor = $proveedor->id;
-
-                // Buscar categoría por nombre
-                $catalogo = CatalogoCategoria::where('desc', 'like', '%' . $request->catalogo . '%')->first();
-                if (!$catalogo) {
-                    DB::rollBack();
-                    return $this->sendError('La categoría "' . $request->catalogo . '" no existe', 'error', 404);
-                }
-                $id_catalogo = $catalogo->id;
-            }
-
-            // Verificar si ya existe un producto con ese SKU
-            $productoExistente = CatalogoProductos::where('sku', $request->sku)->first();
-
-            if ($productoExistente) {
-                // Si existe, actualizarlo
-                $productoExistente->update([
-                    'nombre_producto' => $request->nombre_producto,
-                    'descripcion' => $request->descripcion,
-                    'marca' => $request->marca,
-                    'color' => $request->color,
-                    'id_proveedor' => $id_proveedor,
-                    'id_catalogo' => $id_catalogo,
-                    'costo_con_iva' => $request->costo_con_iva,
-                    'costo_sin_iva' => $request->costo_sin_iva,
-                    'costo_puntos_con_iva' => $request->costo_puntos_con_iva,
-                    'costo_puntos_sin_iva' => $request->costo_puntos_sin_iva,
-                    'fee_brimagy' => $request->fee_brimagy,
-                    'subtotal' => $request->subtotal,
-                    'envio_base' => $request->envio_base,
-                    'costo_caja' => $request->costo_caja,
-                    'envio_extra' => $request->envio_extra,
-                    'total_envio' => $request->total_envio,
-                    'total' => $request->total,
-                    'puntos' => $request->puntos,
-                    'factor' => $request->factor,
-                    'updated_at' => now()->setTimezone('America/Mexico_City'),
-                ]);
-
-                $user = Auth::user();
-                $log['evento'] = 'Actualización de producto';
-                $log['descripcion'] = "El usuario con id: {$user->id} actualizó el producto con id: {$productoExistente->id} (SKU: {$request->sku})";
-                $log['id_usuario'] = $user->id;
-                BitacoraEventos::create($log);
-
-                DB::commit();
-
-                return $this->sendResponse($productoExistente, 'Producto actualizado exitosamente.');
-            }
-
-            $producto = CatalogoProductos::create([
-                'nombre_producto' => $request->nombre_producto,
-                'descripcion' => $request->descripcion,
-                'marca' => $request->marca,
-                'sku' => $request->sku,
-                'color' => $request->color,
-                'id_proveedor' => $id_proveedor,
-                'id_catalogo' => $id_catalogo,
-                'costo_con_iva' => $request->costo_con_iva,
-                'costo_sin_iva' => $request->costo_sin_iva,
-                'costo_puntos_con_iva' => $request->costo_puntos_con_iva,
-                'costo_puntos_sin_iva' => $request->costo_puntos_sin_iva,
-                'fee_brimagy' => $request->fee_brimagy,
-                'subtotal' => $request->subtotal,
-                'envio_base' => $request->envio_base,
-                'costo_caja' => $request->costo_caja,
-                'envio_extra' => $request->envio_extra,
-                'total_envio' => $request->total_envio,
-                'total' => $request->total,
-                'puntos' => $request->puntos,
-                'factor' => $request->factor,
-            ]);
-
-            $user = Auth::user();
-            $log['evento'] = 'Creación de producto';
-            $log['descripcion'] = "El usuario con id: {$user->id} añadio el producto con id: {$producto->id} al catalogo";
-            $log['id_usuario'] = $user->id;
-            BitacoraEventos::create($log);
-
-            DB::commit();
-
-            return $this->sendResponse($producto, 'Producto registrado exitosamente.');
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return $this->sendError('Error al registrar el producto', $th->getMessage(), 500);
-        }
     }
 
     public function obtenerCodigoValidacion(Request $request)
@@ -402,23 +269,24 @@ class CanjesController extends BaseController
                 // ->leftJoin('dc_catalogo_productos as cdp', 'sp.sku', '=', 'cdp.sku');
                 ->leftJoin('dc_catalogo_productos as cdp', function ($join) {
                     $join->on(function ($query) {
-                        // Caso 1: ambos tienen SKU válido y coinciden
+                        // Ambos tienen SKU válido y coinciden
                         $query->whereRaw("sp.sku IS NOT NULL AND sp.sku != '' AND sp.sku != 'N/A'")
                             ->whereColumn('sp.sku', '=', 'cdp.sku');
                     })->orOn(function ($query) {
-                        // Caso 2: cdp NO tiene SKU → emparejar por nombre y talla
+                        // NO tiene SKU = emparejar por nombre y talla
                         $query->whereRaw("(cdp.sku IS NULL OR cdp.sku = '' OR cdp.sku = 'N/A')")
                             ->whereRaw("TRIM(LOWER(sp.desc)) = TRIM(LOWER(cdp.nombre_producto))")
                             ->whereRaw("TRIM(LOWER(sp.size)) = TRIM(LOWER(cdp.talla))");
                     });
-                });
+                })
+                ->where('cdp.tipo_producto', $request->tipo_producto);
 
             // BÚSQUEDA
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.name', 'LIKE', "%{$search}%")
+                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
                         ->orWhere('sp.email', 'LIKE', "%{$search}%")
                         ->orWhere('sp.sku', 'LIKE', "%{$search}%")
                         ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")

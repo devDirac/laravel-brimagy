@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Models\UserBrimagy;
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
 use Illuminate\Support\Facades\Auth;
@@ -50,6 +51,25 @@ class AuthController extends BaseController
                 'foto' => $request->foto ?? null,
                 'status' => "ACTIVE",
                 'representative_id' => 1,
+            ]);
+            //añadir usuario también a brimagy
+            $userBrimagy = UserBrimagy::create([
+                'brimagy_id' => 0,
+                'representative_id' => 1,
+                'profile' => "member",
+                'send_to' => "direct",
+                'name' => $request->nombre,
+                'first_last_name' => 0,
+                'second_last_name' => 0,
+                'email' => $request->correo,
+                'password' => bcrypt($request->password),
+                'phone' => $request->telefono ?? null,
+                'api_id' => $request->correo,
+                'password_status' => "to_change",
+                'last_change_of_password' => "2018-05-17",
+                'status' => "ACTIVE",
+                'foto' => $request->foto ?? null,
+                'tipo_usuario' => $request->permisos,
             ]);
 
             DB::commit();

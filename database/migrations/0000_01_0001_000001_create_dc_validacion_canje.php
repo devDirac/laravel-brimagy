@@ -17,7 +17,7 @@ return new class extends Migration
             $table->integer('id_canje');
             $table->integer('id_producto');
             $table->integer('cantidad_producto');
-            $table->integer('id_proveedor');
+            $table->integer('id_proveedor')->nullable();
             $table->string('no_orden')->nullable();
             $table->datetime('fecha_validacion')->nullable();
             $table->integer('codigo_validacion')->nullable();
