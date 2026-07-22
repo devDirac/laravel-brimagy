@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Tokens;
 use App\Models\ProcesosTokens;
 use App\Models\BitacoraEventos;
+use App\Models\UserClub;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -24,7 +25,6 @@ class AuthController extends BaseController
 
     public function signup(Request $request)
     {
-        // Usamos una transacción para garantizar que si algo falla, no se queden registros a medias
         DB::beginTransaction();
 
         try {
@@ -42,35 +42,48 @@ class AuthController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $user = User::create([
-                'name' => $request->nombre,
-                'email' => $request->correo,
-                'phone' => $request->telefono ?? null,
-                'password' => bcrypt($request->password),
-                'tipo_usuario' => $request->permisos,
-                'foto' => $request->foto ?? null,
-                'status' => "ACTIVE",
-                'representative_id' => 1,
-            ]);
-            //añadir usuario también a brimagy
-            $userBrimagy = UserBrimagy::create([
-                'brimagy_id' => 0,
-                'representative_id' => 1,
-                'profile' => "member",
-                'send_to' => "direct",
-                'name' => $request->nombre,
-                'first_last_name' => 0,
-                'second_last_name' => 0,
-                'email' => $request->correo,
-                'password' => bcrypt($request->password),
-                'phone' => $request->telefono ?? null,
-                'api_id' => $request->correo,
-                'password_status' => "to_change",
-                'last_change_of_password' => "2018-05-17",
-                'status' => "ACTIVE",
-                'foto' => $request->foto ?? null,
-                'tipo_usuario' => $request->permisos,
-            ]);
+            if ($request->plataforma === "club_bohn") {
+                $user = UserClub::create([
+                    'name' => $request->nombre,
+                    'email' => $request->correo,
+                    'phone' => $request->telefono ?? null,
+                    'password' => bcrypt($request->password),
+                    'tipo_usuario' => $request->permisos,
+                    'foto' => $request->foto ?? null,
+                    'status' => "ACTIVE",
+                    'representative_id' => 13,
+                ]);
+            } else {
+                $user = User::create([
+                    'name' => $request->nombre,
+                    'email' => $request->correo,
+                    'phone' => $request->telefono ?? null,
+                    'password' => bcrypt($request->password),
+                    'tipo_usuario' => $request->permisos,
+                    'foto' => $request->foto ?? null,
+                    'status' => "ACTIVE",
+                    'representative_id' => 1,
+                ]);
+                //añadir usuario también a brimagy
+                $userBrimagy = UserBrimagy::create([
+                    'brimagy_id' => 0,
+                    'representative_id' => 1,
+                    'profile' => "member",
+                    'send_to' => "direct",
+                    'name' => $request->nombre,
+                    'first_last_name' => 0,
+                    'second_last_name' => 0,
+                    'email' => $request->correo,
+                    'password' => bcrypt($request->password),
+                    'phone' => $request->telefono ?? null,
+                    'api_id' => $request->correo,
+                    'password_status' => "to_change",
+                    'last_change_of_password' => "2018-05-17",
+                    'status' => "ACTIVE",
+                    'foto' => $request->foto ?? null,
+                    'tipo_usuario' => $request->permisos,
+                ]);
+            }
 
             DB::commit();
 
@@ -82,6 +95,42 @@ class AuthController extends BaseController
     }
 
     public function signin(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required',
+                'password' => 'required',
+            ]);
+            if ($validator->fails()) {
+                return $this->sendError($this->invalidFormatMessage, $validator->errors());
+            }
+            if (Auth::guard('plataforma')->attempt(['email' => $request->email, 'password' => $request->password, 'status' => 'ACTIVE'])) {
+                $user = Auth::guard('plataforma')->user();
+                $users['data'] = $user;
+                $token = $user->createToken('MyAuthBrimagy');
+                $users['token'] = $token->plainTextToken;
+                unset($user->created_at);
+                unset($user->updated_at);
+
+                $log['evento'] = 'Inicio de sesión';
+                $log['descripcion'] = "El usuario con id: {$user->id} inicio sesión";
+                $log['id_usuario'] = $user->id;
+                BitacoraEventos::create($log);
+
+                return $this->sendResponse($users);
+            } else {
+                return $this->sendError('La contraseña o el usuario son incorrectos o el usuario ya fue dado de baja', ['error' => ''], 401);
+            }
+        } catch (\Throwable $th) {
+            return response()->json([
+                'error' => 'Ocurrió un error',
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
+        }
+    }
+    /*public function signin(Request $request)
     {
         try {
             $validator = Validator::make($request->all(), [
@@ -116,13 +165,13 @@ class AuthController extends BaseController
                 'file' => $th->getFile(),
             ], 500);
         }
-    }
+    }*/
 
     public function logOut(Request $request)
     {
         try {
             $request->user()->currentAccessToken()->delete();
-            Auth::guard('web')->logout();
+            Auth::guard('plataforma')->logout();
             return $this->sendResponse('Cierre de sesión exitoso.');
         } catch (\Throwable $th) {
             return $this->sendError('Error al cerrar la sesión del usuario', $th, 500);

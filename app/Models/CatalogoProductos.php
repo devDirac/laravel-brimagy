@@ -35,7 +35,8 @@ class CatalogoProductos extends Model
         'foto_producto',
         'id_producto_brimagy',
         'id_plataforma',
-        'tipo_producto'
+        'tipo_producto',
+        'stock'
     ];
 
     protected $casts = [

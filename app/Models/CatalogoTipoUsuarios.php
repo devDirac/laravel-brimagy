@@ -5,16 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Encuestas extends Model
+class CatalogoTipoUsuarios extends Model
 {
     use HasFactory;
-    protected $table = 'dc_encuestas';
+    protected $table = 'dc_catalogo_tipo_usuarios';
     protected $fillable = [
-        'pregunta',
-        'tipo_encuesta',
-        'tipo_pregunta',
         'id_plataforma',
-        'estatus',
+        'nombre',
     ];
 
     protected $casts = [

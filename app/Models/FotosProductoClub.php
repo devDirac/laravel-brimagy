@@ -5,16 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Encuestas extends Model
+class FotosProductoClub extends Model
 {
     use HasFactory;
-    protected $table = 'dc_encuestas';
+    protected $connection = 'mysql_club_bohn';
+    protected $table = 'photos_for_the_award';
     protected $fillable = [
-        'pregunta',
-        'tipo_encuesta',
-        'tipo_pregunta',
-        'id_plataforma',
-        'estatus',
+        'award_id',
+        'photo',
+        'status',
     ];
 
     protected $casts = [

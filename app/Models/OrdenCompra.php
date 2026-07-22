@@ -16,6 +16,7 @@ class OrdenCompra extends Model
         'id_usuario',
         'productos_canje',
         'observaciones',
+        'id_plataforma',
         'estatus',
     ];
 

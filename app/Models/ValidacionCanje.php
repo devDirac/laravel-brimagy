@@ -19,6 +19,7 @@ class ValidacionCanje extends Model
         'no_orden',
         'fecha_validacion',
         'codigo_validacion',
+        'id_plataforma',
         'estatus'
     ];
 

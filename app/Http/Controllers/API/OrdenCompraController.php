@@ -15,8 +15,9 @@ use App\Models\CatalogoProveedores;
 use App\Models\Facturas;
 use App\Models\Notificaciones;
 use App\Models\OrdenCompra;
+use App\Models\Plataformas;
 use App\Models\RecepcionAlmacen;
-use App\Models\User;
+use App\Models\UsuariosPlataforma;
 use App\Models\ValidacionCanje;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Http;
@@ -53,6 +54,7 @@ class OrdenCompraController extends BaseController
                 'id_articulo' => $request->id_articulo,
                 'id_proveedor' => $request->id_proveedor,
                 'observaciones' => $request->observaciones,
+                'id_plataforma' => $request->id_plataforma,
                 'estatus' => "orden_generada",
             ]);
 
@@ -74,9 +76,18 @@ class OrdenCompraController extends BaseController
     public function getProveedoresOC(Request $request)
     {
         try {
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             // Obtener todos los IDs de canjes que están en órdenes de compra
             $productosEnOrdenes = DB::table('dc_orden_compra')
                 ->select('productos_canje')
+                ->where('id_plataforma', $id_plataforma)
                 ->get()
                 ->map(function ($producto) {
                     $productos = json_decode($producto->productos_canje, true);
@@ -88,8 +99,10 @@ class OrdenCompraController extends BaseController
                 ->toArray();
 
             $sinProveedorCount = DB::table('dc_validacion_canje as vc')
+                ->join('dc_catalogo_productos as cpro', 'cpro.id', '=', 'vc.id_producto')
                 ->whereNull('vc.id_proveedor')
                 ->where('vc.estatus', 'identidad_validada')
+                ->where('cpro.id_plataforma', $id_plataforma)
                 ->when(!empty($productosEnOrdenes), function ($q) use ($productosEnOrdenes) {
                     $q->whereNotIn('vc.id_producto', $productosEnOrdenes);
                 })
@@ -109,11 +122,13 @@ class OrdenCompraController extends BaseController
                           JOIN dc_validacion_canje vc ON cpro.id = vc.id_producto
                           WHERE cpro.id_proveedor = cp.id
                           AND vc.estatus = "identidad_validada"
+                          AND cpro.id_plataforma = ' . (int) $id_plataforma . '
                           ' . (!empty($productosEnOrdenes) ? 'AND cpro.id NOT IN (' . implode(',', $productosEnOrdenes) . ')' : '') . '
                          ) as total_canjes'),
                     DB::raw('(SELECT COUNT(oc2.id)
                           FROM dc_orden_compra oc2
                           WHERE oc2.id_proveedor = cp.id
+                          AND oc2.id_plataforma = ' . (int) $id_plataforma . '
                          ) as total_ordenes_compra')
                 );
 
@@ -134,6 +149,7 @@ class OrdenCompraController extends BaseController
             // Órdenes de compra sin proveedor asignado
             $ordenessinProveedorCount = DB::table('dc_orden_compra')
                 ->whereNull('id_proveedor')
+                ->where('id_plataforma', $id_plataforma)
                 ->count();
 
             if ($sinProveedorCount > 0 || $ordenessinProveedorCount > 0) {
@@ -175,14 +191,14 @@ class OrdenCompraController extends BaseController
                     'cp.descripcion as descripcion_proveedor',
                     'cp.nombre_contacto',
                     'cp.telefono',
-                    'u.id as id_usuario',
-                    'u.name as nombre_vendedor',
-                    'u.first_last_name as primer_apellido',
-                    'u.second_last_name as segundo_apellido',
+                    'up.id as id_usuario',
+                    'up.name as nombre_vendedor',
+                    /*'up.first_last_name as primer_apellido',
+                    'up.second_last_name as segundo_apellido',*/
                     'cp.correo'
                 )
                 ->leftJoin('dc_catalogo_proveedores as cp', 'oc.id_proveedor', '=', 'cp.id')
-                ->leftJoin('users as u', 'oc.id_usuario', '=', 'u.id')
+                ->leftJoin('dc_usuarios_plataforma as up', 'oc.id_usuario', '=', 'up.id')
                 ->where('oc.id', $request->id_orden_compra)
                 ->orderBy('oc.created_at', 'desc')
                 ->first();
@@ -249,8 +265,6 @@ class OrdenCompraController extends BaseController
                     'updated_at' => $ordenCompra->updated_at,
                     'id_usuario' => $ordenCompra->id_usuario,
                     'nombre_vendedor' => $ordenCompra->nombre_vendedor,
-                    'primer_apellido' => $ordenCompra->primer_apellido,
-                    'segundo_apellido' => $ordenCompra->segundo_apellido,
                 ],
                 'proveedor' => [
                     'id' => $ordenCompra->id_proveedor,
@@ -294,6 +308,14 @@ class OrdenCompraController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             if (
                 !$request->has('id_proveedor') ||
                 $request->id_proveedor === null ||
@@ -307,7 +329,8 @@ class OrdenCompraController extends BaseController
                         'oc.created_at as fecha_creacion',
                         DB::raw('JSON_LENGTH(oc.productos_canje) as total_productos')
                     )
-                    ->whereNull('id_proveedor');
+                    ->whereNull('id_proveedor')
+                    ->where('oc.id_plataforma', $id_plataforma);
             } else {
                 $query = DB::table('dc_orden_compra as oc')
                     ->select(
@@ -317,7 +340,8 @@ class OrdenCompraController extends BaseController
                         'oc.created_at as fecha_creacion',
                         DB::raw('JSON_LENGTH(oc.productos_canje) as total_productos')
                     )
-                    ->where('oc.id_proveedor', $request->id_proveedor);
+                    ->where('oc.id_proveedor', $request->id_proveedor)
+                    ->where('oc.id_plataforma', $id_plataforma);
             }
 
             // BÚSQUEDA
@@ -341,6 +365,15 @@ class OrdenCompraController extends BaseController
     public function getCanjesPorProveedor(Request $request)
     {
         try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             if (
                 !$request->has('id_proveedor') ||
                 $request->id_proveedor === null ||
@@ -370,6 +403,7 @@ class OrdenCompraController extends BaseController
                     ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
                     ->whereNull('cdp.id_proveedor')
                     ->where('vc.estatus', '=', 'identidad_validada')
+                    ->where('cdp.id_plataforma', $id_plataforma)
                     // Excluir los que ya tienen orden de compra
                     ->whereNotExists(function ($subquery) {
                         $subquery->select(DB::raw(1))
@@ -401,6 +435,7 @@ class OrdenCompraController extends BaseController
                     ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
                     ->where('cp.id', $request->id_proveedor)
                     ->where('vc.estatus', '=', 'identidad_validada')
+                    ->where('cdp.id_plataforma', $id_plataforma)
                     // Excluir los que ya tienen orden de compra
                     ->whereNotExists(function ($subquery) {
                         $subquery->select(DB::raw(1))
@@ -414,6 +449,7 @@ class OrdenCompraController extends BaseController
             // Obtener todas las órdenes de compra del proveedor
             $ordenesCompra = DB::table('dc_orden_compra')
                 ->where('id_proveedor', $request->id_proveedor)
+                ->where('id_plataforma', $id_plataforma)
                 ->get();
 
             // Agregar el estatus_proveedor a cada canje
@@ -471,6 +507,14 @@ class OrdenCompraController extends BaseController
                 DB::rollBack();
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
+
+            // es club bohn
+            $plataforma = $request->plataforma === "club_bohn" ? "club bohn" : $request->plataforma;
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
 
             $productosIds = collect($request->productos)->pluck('id_producto')->toArray();
 
@@ -543,6 +587,7 @@ class OrdenCompraController extends BaseController
                 'no_orden' => $numeroOrden,
                 'productos_canje' => json_encode($productosCompletos, JSON_FORCE_OBJECT),
                 'observaciones' => $request->observaciones,
+                'id_plataforma' => $id_plataforma,
                 'estatus' => $estado,
             ]);
 
@@ -684,10 +729,10 @@ class OrdenCompraController extends BaseController
                 ->whereNotNull('telefono')
                 ->where('telefono', '!=', '')
                 ->value('telefono');
-            $telefonosAdmins = User::where('tipo_usuario', 6)
-                ->whereNotNull('phone')
-                ->where('phone', '!=', '')
-                ->pluck('phone')
+            $telefonosAdmins = UsuariosPlataforma::where('tipo_usuario', 7)
+                ->whereNotNull('telefono')
+                ->where('telefono', '!=', '')
+                ->pluck('telefono')
                 ->toArray();
 
             $canjeIdEncriptado = $this->encriptarCorto($no_orden);
@@ -788,14 +833,12 @@ class OrdenCompraController extends BaseController
                     'cp.descripcion as descripcion_proveedor',
                     'cp.nombre_contacto',
                     'cp.telefono',
-                    'u.id as id_usuario',
-                    'u.name as nombre_vendedor',
-                    'u.first_last_name as primer_apellido',
-                    'u.second_last_name as segundo_apellido',
+                    'up.id as id_usuario',
+                    'up.name as nombre_vendedor',
                     'cp.correo'
                 )
                 ->leftJoin('dc_catalogo_proveedores as cp', 'oc.id_proveedor', '=', 'cp.id')
-                ->leftJoin('users as u', 'oc.id_usuario', '=', 'u.id')
+                ->leftJoin('dc_usuarios_plataforma as up', 'oc.id_usuario', '=', 'up.id')
                 ->where('oc.no_orden', $idOrdenCompraDesencriptado)
                 ->orderBy('oc.created_at', 'desc')
                 ->first();
@@ -863,8 +906,6 @@ class OrdenCompraController extends BaseController
                     'updated_at' => $ordenCompra->updated_at,
                     'id_usuario' => $ordenCompra->id_usuario,
                     'nombre_vendedor' => $ordenCompra->nombre_vendedor,
-                    'primer_apellido' => $ordenCompra->primer_apellido,
-                    'segundo_apellido' => $ordenCompra->segundo_apellido,
                 ],
                 'proveedor' => [
                     'id' => $ordenCompra->id_proveedor,

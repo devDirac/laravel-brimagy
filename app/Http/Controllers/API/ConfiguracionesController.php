@@ -249,6 +249,40 @@ class ConfiguracionesController extends BaseController
         }
     }
 
+    public function getVariablesGlobalesPorPlataforma(Request $request)
+    {
+        try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $query = DB::table('dc_variables_globales as vg')
+                ->select(
+                    'vg.id',
+                    'vg.fee_brimagy',
+                    'vg.envio_base',
+                    'vg.costo_caja',
+                    'vg.envio_extra',
+                    'p.nombre as nombre_plataforma',
+                    'p.descripcion',
+                    'vg.created_at as fecha_creacion',
+                )
+                ->leftJoin('dc_plataformas as p', 'p.id', '=', 'vg.id_plataforma')
+                ->where('vg.id_plataforma', $id_plataforma);
+
+            $variablesGlobales = $query->orderBy('vg.id', 'asc')->first();
+
+            return $this->sendResponse($variablesGlobales);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las variables globales', $th, 500);
+        }
+    }
+
     public function getProductosSincronizados(Request $request)
     {
         try {

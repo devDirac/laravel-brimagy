@@ -9,7 +9,7 @@ class FotosProductoBrimagy extends Model
 {
     use HasFactory;
     protected $connection = 'mysql_brimagy';
-    protected $table = 'photos_for_the_award_dirac';
+    protected $table = 'photos_for_the_award';
     protected $fillable = [
         'award_id',
         'photo',

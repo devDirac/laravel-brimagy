@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Models\Categoria;
+use App\Models\CategoriaBrimagy;
+use App\Models\SubCategoriaBrimagy;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -9,7 +12,9 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoCategoria;
+use App\Models\CategoriaClub;
 use App\Models\SubCategoria;
+use App\Models\SubCategoriaClub;
 
 class CategoriasController extends BaseController
 {
@@ -20,18 +25,68 @@ class CategoriasController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'nombre' => 'required|string',
-                'category_id' => 'required|integer',
+                'category_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
                 DB::rollBack();
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
+            if ($request->envio === "excel") {
 
-            $producto = SubCategoria::create([
-                'desc' => $request->nombre,
-                'category_id' => $request->category_id,
-            ]);
+                if ($request->plataforma === "club_bohn") {
+                    $categoria = CategoriaClub::create([
+                        'desc' => $request->nombre,
+                        'file_path' => $request->file_path,
+                    ]);
+                    $subcategoria = SubCategoriaClub::create([
+                        'desc' => $request->nombre,
+                        'category_id' => $categoria->id,
+                        'file_path' => $request->file_path,
+                    ]);
+                } else {
+                    $categoria = Categoria::create([
+                        'desc' => $request->nombre,
+                        'file_path' => $request->file_path,
+                    ]);
+                    $subcategoria = SubCategoria::create([
+                        'desc' => $request->nombre,
+                        'category_id' => $categoria->id,
+                        'file_path' => $request->file_path,
+                    ]);
+
+                    //crearlas en brimagy
+                    $categoriaB = CategoriaBrimagy::create([
+                        'desc' => $request->nombre,
+                        'file_path' => $request->file_path,
+                    ]);
+                    $subcategoriaB = SubCategoriaBrimagy::create([
+                        'desc' => $request->nombre,
+                        'category_id' => $categoriaB->id,
+                        'file_path' => $request->file_path,
+                    ]);
+                }
+
+                DB::commit();
+                return $this->sendResponse($subcategoria, 'Categoría registrada exitosamente.');
+            }
+
+            if ($request->plataforma === "club_bohn") {
+                $producto = SubCategoriaClub::create([
+                    'desc' => $request->nombre,
+                    'category_id' => $request->category_id,
+                ]);
+            } else {
+                $producto = SubCategoria::create([
+                    'desc' => $request->nombre,
+                    'category_id' => $request->category_id,
+                ]);
+                //crearlo en brimagy
+                $productoB = SubCategoriaBrimagy::create([
+                    'desc' => $request->nombre,
+                    'category_id' => $request->category_id,
+                ]);
+            }
 
             $user = Auth::user();
             $log['evento'] = 'Creación de categoría';
@@ -47,20 +102,32 @@ class CategoriasController extends BaseController
             return $this->sendError('Error al registrar la categoría', $th->getMessage(), 500);
         }
     }
-    public function getCategoriasPrincipal()
+    public function getCategoriasPrincipal(Request $request)
     {
         try {
-            $categorias = CatalogoCategoria::get();
+
+            $categorias = collect();
+            if ($request->plataforma === "club_bohn") {
+                $categorias = CategoriaClub::orderBy('id', 'desc')->get();
+            } else {
+                $categorias = CatalogoCategoria::orderBy('id', 'desc')->get();
+            }
+
 
             return $this->sendResponse($categorias);
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener las categorías', $th, 500);
         }
     }
-    public function getCategorias()
+    public function getCategorias(Request $request)
     {
         try {
-            $categorias = SubCategoria::get();
+            $categorias = collect();
+            if ($request->plataforma === "club_bohn") {
+                $categorias = SubCategoriaClub::orderBy('id', 'desc')->get();
+            } else {
+                $categorias = SubCategoria::orderBy('id', 'desc')->get();
+            }
 
             return $this->sendResponse($categorias);
         } catch (\Throwable $th) {

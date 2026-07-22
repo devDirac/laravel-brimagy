@@ -29,6 +29,7 @@ Route::put('activarUsuario', [UserController::class, 'activarUsuario'])->middlew
 Route::put('desactivarUsuario', [UserController::class, 'desactivarUsuario'])->middleware($SANCTUM);
 Route::put('editarUsuario', [UserController::class, 'editarUsuario'])->middleware($SANCTUM);
 Route::get('getUsuarioPorId', [UserController::class, 'getUsuarioPorId'])->middleware($SANCTUM);
+Route::get('getCatalogoTipoUsuarios', [UserController::class, 'getCatalogoTipoUsuarios'])->middleware($SANCTUM);
 
 Route::post('recuperaContrasena', [AuthController::class, 'passwordRecoverSendLink']);
 Route::post('recuperaContrasenaTokenValidacion', [AuthController::class, 'passwordRecoverTokenValidation']);
@@ -59,7 +60,9 @@ Route::post('verificarSkus', [ProductosController::class, 'verificarSkus'])->mid
 Route::post('verificarSkuDisponible', [ProductosController::class, 'verificarSkuDisponible'])->middleware($SANCTUM);
 Route::get('busquedaInteligenteBrimagy', [ProductosController::class, 'busquedaInteligenteBrimagy'])->middleware($SANCTUM);
 Route::get('getBitacoraProductoPorId', [ProductosController::class, 'getBitacoraProductoPorId'])->middleware($SANCTUM);
-Route::get('verificarIdProductoBrimagy', [ProductosController::class, 'verificarIdProductoBrimagy'])->middleware($SANCTUM);
+Route::post('verificarIdProductoBrimagy', [ProductosController::class, 'verificarIdProductoBrimagy'])->middleware($SANCTUM);
+Route::put('marcarNoDisponible', [ProductosController::class, 'marcarNoDisponible'])->middleware($SANCTUM);
+Route::put('marcarDisponible', [ProductosController::class, 'marcarDisponible'])->middleware($SANCTUM);
 //COLORES PRODUCTO
 Route::post('crearEditarColorProducto', [ProductosController::class, 'crearEditarColorProducto'])->middleware($SANCTUM);
 Route::get('getProductoColorPorId', [ProductosController::class, 'getProductoColorPorId'])->middleware($SANCTUM);
@@ -165,10 +168,12 @@ Route::post('crearPlataforma', [ConfiguracionesController::class, 'crearPlatafor
 Route::get('getVariablesGlobales', [ConfiguracionesController::class, 'getVariablesGlobales'])->middleware($SANCTUM);
 Route::get('getPlataformas', [ConfiguracionesController::class, 'getPlataformas'])->middleware($SANCTUM);
 Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getProductosSincronizados'])->middleware($SANCTUM);
+Route::get('getVariablesGlobalesPorPlataforma', [ConfiguracionesController::class, 'getVariablesGlobalesPorPlataforma'])->middleware($SANCTUM);
 Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware($SANCTUM);
 
 //QUERYS DE LA BASE DE DATOS DE BRIMAGY
 Route::get('getCatalogoProductosDigitalesBrimagy', [ProductosController::class, 'getCatalogoProductosDigitalesBrimagy'])->middleware($SANCTUM);
+Route::get('getCatalogoClubBohnBrimagy', [ProductosController::class, 'getCatalogoClubBohnBrimagy'])->middleware($SANCTUM);
 
 //ESTADISTICAS
 Route::get('getEstadisticasHome', [EstadisticasController::class, 'getEstadisticasHome'])->middleware($SANCTUM);
@@ -176,3 +181,9 @@ Route::get('getEstadisticasCanjeados', [EstadisticasController::class, 'getEstad
 Route::get('getEstadisticasPuntosCategoria', [EstadisticasController::class, 'getEstadisticasPuntosCategoria'])->middleware($SANCTUM);
 Route::get('getEstadisticasPuntosPorTipoProducto', [EstadisticasController::class, 'getEstadisticasPuntosPorTipoProducto'])->middleware($SANCTUM);
 Route::get('getEstadisticasComparativa', [EstadisticasController::class, 'getEstadisticasComparativa'])->middleware($SANCTUM);
+
+//USUARIOS DE PLATAFORMA
+Route::post('crearUsuarioPlataforma', [UserController::class, 'crearUsuarioPlataforma'])->middleware($SANCTUM);
+Route::get('getCheckEmailUsuarioPlataforma', [UserController::class, 'getCheckEmailUsuarioPlataforma'])->middleware($SANCTUM);
+Route::get('getUsuariosPlataforma', [UserController::class, 'getUsuariosPlataforma'])->middleware($SANCTUM);
+Route::get('getTipoUsuarios', [UserController::class, 'getTipoUsuarios'])->middleware($SANCTUM);

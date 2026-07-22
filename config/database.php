@@ -78,6 +78,21 @@ return [
             'engine' => null,
         ],
 
+        'mysql_club_bohn' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST_CLUB_BOHN', ''),
+            'port' => env('DB_PORT_CLUB_BOHN', ''),
+            'database' => env('DB_DATABASE_CLUB_BOHN', ''),
+            'username' => env('DB_USERNAME_CLUB_BOHN', ''),
+            'password' => env('DB_PASSWORD_CLUB_BOHN', ''),
+            'unix_socket' => env('DB_SOCKET_CLUB_BOHN', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

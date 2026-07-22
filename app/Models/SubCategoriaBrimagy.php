@@ -5,16 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Encuestas extends Model
+class SubCategoriaBrimagy extends Model
 {
     use HasFactory;
-    protected $table = 'dc_encuestas';
+    protected $connection = 'mysql_brimagy';
+    protected $table = 'sub_categories';
     protected $fillable = [
-        'pregunta',
-        'tipo_encuesta',
-        'tipo_pregunta',
-        'id_plataforma',
-        'estatus',
+        'category_id',
+        'desc',
+        'status',
+        'file_path',
     ];
 
     protected $casts = [

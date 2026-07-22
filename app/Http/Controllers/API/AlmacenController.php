@@ -8,7 +8,9 @@ use App\Http\Controllers\API\BaseController as BaseController;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoProductos;
 use App\Models\CatalogoProveedores;
+use App\Models\Plataformas;
 use App\Models\ProductoBrimagy;
+use App\Models\ProductoClub;
 use App\Models\RecepcionAlmacen;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,15 @@ class AlmacenController extends BaseController
     public function getProductosAlmacen(Request $request)
     {
         try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             $query = DB::table('dc_recepcion_almacen as ra')
                 ->select(
                     'ra.id',
@@ -34,7 +45,6 @@ class AlmacenController extends BaseController
                     'ra.id_orden_compra',
                     'oc.no_orden',
                     'ra.cantidad_producto',
-                    //'ra.cantidad_almacen',
                     DB::raw('(
             SELECT SUM(ra2.cantidad_almacen)
             FROM dc_recepcion_almacen ra2
@@ -70,7 +80,8 @@ class AlmacenController extends BaseController
                         ->whereNotNull('id_canje')
                         ->groupBy('id_canje');
                 })
-                ->whereNot('ra.estatus', 'entregado');
+                ->whereNot('ra.estatus', 'entregado')
+                ->where('cdp.id_plataforma', $id_plataforma);
 
             $productosAlmacen = $query->orderBy('ra.created_at', 'desc')->get();
 
@@ -288,24 +299,45 @@ class AlmacenController extends BaseController
                 $tipo_producto = $datosProducto->tipo_producto;
 
                 //primero insertamos el nuevo producto en la tabla awards de brimagy para obtener el nuevo id y relacionarla con nuestra tabla dc_catalogo_productos
-                $productoTablaBrimagy = DB::connection('mysql_brimagy')
-                    ->table('awards as a')
-                    ->where('a.id', $datosProducto->id_producto_brimagy)->first();
+                if ($request->plataforma === 'club_bohn') {
+                    $productoTablaBrimagy = DB::connection('mysql_club_bohn')
+                        ->table('awards as a')
+                        ->where('a.id', $datosProducto->id_producto_brimagy)->first();
 
-                $productoNuevoDesdeBrimagy = ProductoBrimagy::create([
-                    'desc' => $productoTablaBrimagy->desc,
-                    'required_score' => $productoTablaBrimagy->required_score,
-                    'sub_category_id' => $productoTablaBrimagy->sub_category_id,
-                    'photo_name' => $productoTablaBrimagy->photo_name,
-                    'sku' => $productoTablaBrimagy->sku,
-                    'features' => $productoTablaBrimagy->features,
-                    'TyC' => $productoTablaBrimagy->TyC,
-                    'validity' => $productoTablaBrimagy->validity,
-                    'status' => $productoTablaBrimagy->status,
-                    'stock' => $productoTablaBrimagy->stock,
-                    'score_ambassadors' => $productoTablaBrimagy->score_ambassadors,
-                    'new' => $productoTablaBrimagy->new,
-                ]);
+                    $productoNuevoDesdeBrimagy = ProductoClub::create([
+                        'desc' => $productoTablaBrimagy->desc,
+                        'required_score' => $productoTablaBrimagy->required_score,
+                        'sub_category_id' => $productoTablaBrimagy->sub_category_id,
+                        'photo_name' => $productoTablaBrimagy->photo_name,
+                        'sku' => $productoTablaBrimagy->sku,
+                        'features' => $productoTablaBrimagy->features,
+                        'TyC' => $productoTablaBrimagy->TyC,
+                        'validity' => $productoTablaBrimagy->validity,
+                        'status' => $productoTablaBrimagy->status,
+                        'stock' => $productoTablaBrimagy->stock,
+                        'score_promotions' => $productoTablaBrimagy->score_promotions,
+                        'NEW' => $productoTablaBrimagy->NEW,
+                    ]);
+                } else {
+                    $productoTablaBrimagy = DB::connection('mysql_brimagy')
+                        ->table('awards as a')
+                        ->where('a.id', $datosProducto->id_producto_brimagy)->first();
+
+                    $productoNuevoDesdeBrimagy = ProductoBrimagy::create([
+                        'desc' => $productoTablaBrimagy->desc,
+                        'required_score' => $productoTablaBrimagy->required_score,
+                        'sub_category_id' => $productoTablaBrimagy->sub_category_id,
+                        'photo_name' => $productoTablaBrimagy->photo_name,
+                        'sku' => $productoTablaBrimagy->sku,
+                        'features' => $productoTablaBrimagy->features,
+                        'TyC' => $productoTablaBrimagy->TyC,
+                        'validity' => $productoTablaBrimagy->validity,
+                        'status' => $productoTablaBrimagy->status,
+                        'stock' => $productoTablaBrimagy->stock,
+                        'score_ambassadors' => $productoTablaBrimagy->score_ambassadors,
+                        'new' => $productoTablaBrimagy->new,
+                    ]);
+                }
 
                 $producto = CatalogoProductos::create([
                     'nombre_producto' => $nombre_producto,
@@ -421,8 +453,33 @@ class AlmacenController extends BaseController
             $total = $datosProducto->total;
             $puntos = $datosProducto->puntos;
             $factor = $datosProducto->factor;
+            $foto_producto = $datosProducto->foto_producto;
             $id_plataforma = $datosProducto->id_plataforma;
             $tipo_producto = $datosProducto->tipo_producto;
+
+            if ($request->plataforma === "club_bohn") {
+                $producto_brimagy = ProductoClub::create([
+                    'desc' => $nombre_producto,
+                    'features' => $descripcion,
+                    'required_score' => $puntos,
+                    'sub_category_id' => $id_catalogo,
+                    'photo_name' => $foto_producto,
+                    'sku' => $sku,
+                    'TyC' => "",
+                    'validity' => "",
+                ]);
+            } else {
+                $producto_brimagy = ProductoBrimagy::create([
+                    'desc' => $nombre_producto,
+                    'features' => $descripcion,
+                    'required_score' => $puntos,
+                    'sub_category_id' => $id_catalogo,
+                    'photo_name' => $foto_producto,
+                    'sku' => $sku,
+                    'TyC' => "",
+                    'validity' => "",
+                ]);
+            }
 
             $producto = CatalogoProductos::create([
                 'nombre_producto' => $nombre_producto,
@@ -446,6 +503,7 @@ class AlmacenController extends BaseController
                 'total' => $total,
                 'puntos' => $puntos,
                 'factor' => $factor,
+                'id_producto_brimagy' => $producto_brimagy->id,
                 'id_plataforma' => $id_plataforma,
                 'tipo_producto' => $tipo_producto,
             ]);

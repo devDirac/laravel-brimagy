@@ -220,8 +220,6 @@ class ProveedorController extends BaseController
             $producto = CatalogoProductos::where('id', $request->id_producto)
                 ->update($datosParaActualizar);
 
-            DB::commit();
-
             $userLog = Auth::user();
 
             BitacoraEventos::create([
@@ -232,8 +230,22 @@ class ProveedorController extends BaseController
                 'id_usuario'  => $userLog->id,
             ]);
 
+            DB::commit();
+
             return $this->sendResponse("Se ha asignado el proveedor con éxito");
+
+        } catch (\Illuminate\Database\QueryException $e) {
+            DB::rollBack();
+            if ($e->getCode() === '23000') {
+                return $this->sendError(
+                    'El proveedor seleccionado ya no está disponible. Actualiza la lista e intenta de nuevo.',
+                    [],
+                    409
+                );
+            }
+            return $this->sendError('Error al asignar el proveedor', $e, 500);
         } catch (\Throwable $th) {
+            DB::rollBack();
             return $this->sendError('Error al asignar el proveedor', $th, 500);
         }
     }

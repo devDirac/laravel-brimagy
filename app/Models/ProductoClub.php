@@ -5,15 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class SubCategoria extends Model
+class ProductoClub extends Model
 {
     use HasFactory;
-    protected $table = 'sub_categories';
+    protected $connection = 'mysql_club_bohn';
+    protected $table = 'awards';
     protected $fillable = [
-        'category_id',
         'desc',
+        'required_score',
+        'sub_category_id',
+        'photo_name',
+        'sku',
+        'features',
+        'TyC',
+        'validity',
         'status',
-        'file_path',
+        'stock',
+        'score_promotions',
+        'new',
     ];
 
     protected $casts = [
