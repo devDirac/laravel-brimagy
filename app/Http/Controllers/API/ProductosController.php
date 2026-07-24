@@ -72,6 +72,8 @@ class ProductosController extends BaseController
             $id_catalogo = $request->id_catalogo;
             $id_plataforma = $request->id_plataforma;
 
+            $plataforma = Plataformas::where('id', $id_plataforma)->first();
+
             if ($request->tipo_registro === 'excel') {
                 if (empty($request->proveedor)) {
                     $id_proveedor = $request->id_proveedor ?? null;
@@ -113,8 +115,6 @@ class ProductosController extends BaseController
             }
 
             $variables = VariablesGlobales::where('id_plataforma', $id_plataforma)->first();
-
-            $plataforma = Plataformas::where('id', $id_plataforma)->first();
 
             $nombre_plataforma = $plataforma->nombre;
 
@@ -331,7 +331,6 @@ class ProductosController extends BaseController
                         file_get_contents($archivo->getRealPath())
                     );
                 }
-
 
                 $user = Auth::user();
                 $descripcionCambios = !empty($cambios)
@@ -1534,9 +1533,10 @@ class ProductosController extends BaseController
                 'foto_producto',
             ]);
 
-            $datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
-                return !is_null($value) && $value !== '';
-            });
+            /*$datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
+                return !is_null($value);
+            });*/
+
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value, $campo) use ($producto) {
                 return (string) $producto->$campo !== (string) $value;
             }, ARRAY_FILTER_USE_BOTH);
@@ -1572,22 +1572,26 @@ class ProductosController extends BaseController
                     default:
                         break;
                 }
-                //$costo_proveedor_con_iva = $request->costo_con_iva;
-                $costo_proveedor_con_iva = $request->filled('costo_con_iva')
-                    ? $request->costo_con_iva
+
+                $costo_proveedor_con_iva = $request->has('costo_con_iva')
+                    ? ($request->costo_con_iva === '' || $request->costo_con_iva === null ? 0 : $request->costo_con_iva)
                     : $producto->costo_con_iva;
-                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
-                //$costo_puntos_con_iva = $request->costo_puntos_con_iva;
-                $costo_puntos_con_iva = $request->filled('costo_puntos_con_iva')
-                    ? $request->costo_puntos_con_iva
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva > 0
+                    ? $costo_proveedor_con_iva / 1.16
+                    : 0;
+
+                $costo_puntos_con_iva = $request->has('costo_puntos_con_iva')
+                    ? ($request->costo_puntos_con_iva === '' || $request->costo_puntos_con_iva === null ? 0 : $request->costo_puntos_con_iva)
                     : $producto->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
+                $costo_puntos_sin_iva = $costo_puntos_con_iva > 0
+                    ? $costo_puntos_con_iva / 1.16
+                    : 0;
 
                 $envio_base = 180;
                 $costo_caja = 19;
-                //$envio_extra = $request->envio_extra;
-                $envio_extra = $request->filled('envio_extra')
-                    ? $request->envio_extra
+
+                $envio_extra = $request->has('envio_extra')
+                    ? ($request->envio_extra === '' || $request->envio_extra === null ? 0 : $request->envio_extra)
                     : $producto->envio_extra;
 
                 $porcentaje = (float) $fee_brimagy / 100;
@@ -1598,15 +1602,20 @@ class ProductosController extends BaseController
                 $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
                 $puntos = round($redondeo * 15); //factor en bd
             } else {
-                $costo_proveedor_con_iva = $request->filled('costo_con_iva')
-                    ? $request->costo_con_iva
+
+                $costo_proveedor_con_iva = $request->has('costo_con_iva')
+                    ? ($request->costo_con_iva === '' || $request->costo_con_iva === null ? 0 : $request->costo_con_iva)
                     : $producto->costo_con_iva;
-                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
-                //$costo_puntos_con_iva = $request->costo_puntos_con_iva;
-                $costo_puntos_con_iva = $request->filled('costo_puntos_con_iva')
-                    ? $request->costo_puntos_con_iva
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva > 0
+                    ? $costo_proveedor_con_iva / 1.16
+                    : 0;
+
+                $costo_puntos_con_iva = $request->has('costo_puntos_con_iva')
+                    ? ($request->costo_puntos_con_iva === '' || $request->costo_puntos_con_iva === null ? 0 : $request->costo_puntos_con_iva)
                     : $producto->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
+                $costo_puntos_sin_iva = $costo_puntos_con_iva > 0
+                    ? $costo_puntos_con_iva / 1.16
+                    : 0;
 
                 $fee_brimagy = $variables->fee_brimagy;
                 $envio_base = $variables->envio_base;
@@ -1625,13 +1634,6 @@ class ProductosController extends BaseController
             //Subir la foto
             $nombreUnico = $producto->foto_producto;
             $archivo = $request->file('foto_producto');
-
-            \Log::info('Debug archivo', [
-                'archivo_es_null' => is_null($archivo),
-                'has_file' => $request->hasFile('foto_producto'),
-                'all_files' => array_keys($request->allFiles()),
-                'content_type' => $request->header('Content-Type'),
-            ]);
 
             switch ($nombre_plataforma) {
                 case "club bohn":
@@ -1655,11 +1657,6 @@ class ProductosController extends BaseController
                 default:
                     break;
             }
-
-            \Log::info('Categoria check', [
-                'id_catalogo' => $producto->id_catalogo,
-                'sub_categoria_anterior' => $sub_categoria_anterior ?? 'no definida aún',
-            ]);
 
             if ($archivo) {
                 $nombreOriginal = $archivo->getClientOriginalName();
@@ -1801,15 +1798,18 @@ class ProductosController extends BaseController
                 return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
             }
 
-            $producto_brimagy->update([
+            $datosBrimagy = [
                 'desc' => $request->nombre_producto,
                 'required_score' => $puntos,
                 'sub_category_id' => $request->id_catalogo,
-                'photo_name' => $nombreUnico,
+                'photo_name' => $nombreUnico ?: $producto_brimagy->photo_name,
                 'sku' => $request->sku,
+                'features' => $request->descripcion,
                 'TyC' => $request->tyc,
                 'validity' => $request->vigencia,
-            ]);
+            ];
+
+            $producto_brimagy->update($datosBrimagy);
 
             // Detectar cambios para la bitácora
             $cambios = [];
@@ -1838,11 +1838,6 @@ class ProductosController extends BaseController
             return $this->sendResponse("Se ha actualizado el producto con éxito");
         } catch (\Throwable $th) {
             DB::rollBack();
-            \Log::error('Error en editarProducto', [
-                'mensaje' => $th->getMessage(),
-                'archivo' => $th->getFile(),
-                'linea' => $th->getLine(),
-            ]);
             return $this->sendError('Error al actualizar el producto', $th, 500);
         }
     }
@@ -2211,7 +2206,7 @@ class ProductosController extends BaseController
                     $categoria = CatalogoCategoria::where('id', $sub_categoria->category_id)->first();
                 }
 
-                $rutaPrueba = $categoria->file_path . '/' . $nombreUnico;
+                $rutaImagenBrimagy = $categoria->file_path . '/' . $nombreUnico;
 
                 $ruta = $archivo->storeAs(
                     'fotos_producto',
@@ -2220,7 +2215,7 @@ class ProductosController extends BaseController
                 );
 
                 $contenidoArchivo = file_get_contents($archivo->getRealPath());
-                Storage::disk('ftp_brimagy')->put($rutaPrueba, $contenidoArchivo);
+                Storage::disk('ftp_brimagy')->put($rutaImagenBrimagy, $contenidoArchivo);
 
                 if ($request->plataforma === 'club_bohn') {
                     $fotoDirac = FotosProductoClub::create([
@@ -2656,6 +2651,7 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
+
                 $montoExistenteBrimagy->update([
                     'monto' => $request->monto,
                     'points' => $request->puntos,
@@ -2663,6 +2659,7 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
+
 
                 $user = Auth::user();
                 $cambios = [];
