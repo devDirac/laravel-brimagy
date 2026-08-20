@@ -50,7 +50,8 @@ class AlmacenController extends BaseController
             FROM dc_recepcion_almacen ra2
             WHERE ra2.id_canje = ra.id_canje
         ) as cantidad_almacen'),
-                    'ra.fecha',
+                    'ra.fecha_compra',
+                    'ra.costo_envio_real',
                     'ra.comentarios',
                     'ra.estatus',
                     'ra.guia',
@@ -95,7 +96,7 @@ class AlmacenController extends BaseController
         DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
-                'id_orden_compra' => 'required|string'
+                'id_canje' => 'required|string'
             ]);
 
             if ($validator->fails()) {
@@ -108,15 +109,14 @@ class AlmacenController extends BaseController
                     'ra.id as id_producto_almacen',
                     'ra.id_canje',
                     'ra.id_usuario',
-                    'u.name as nombre_usuario',
-                    'u.first_last_name as primer_apellido',
-                    'u.second_last_name as segundo_apellido',
+                    'up.name as nombre_usuario',
                     'ra.id_producto',
                     'cp.nombre as nombre_proveedor',
                     'ra.id_proveedor',
                     'cdp.nombre_producto',
                     'cdp.marca',
                     'cdp.sku',
+                    'cdp.costo_con_iva',
                     'cdp.costo_sin_iva',
                     'cdp2.nombre_producto as nombre_producto_nuevo',
                     'cdp2.marca as marca_nuevo',
@@ -126,7 +126,8 @@ class AlmacenController extends BaseController
                     'oc.no_orden',
                     'ra.cantidad_producto',
                     'ra.cantidad_almacen',
-                    'ra.fecha',
+                    'ra.fecha_compra',
+                    'ra.costo_envio_real',
                     'ra.comentarios',
                     'ra.estatus',
                     'ra.guia',
@@ -143,12 +144,11 @@ class AlmacenController extends BaseController
                 ->leftJoin('dc_catalogo_productos as cdp2', 'ra.id_producto_nuevo', '=', 'cdp2.id')
                 ->leftJoin('dc_catalogo_proveedores as cp', 'ra.id_proveedor', '=', 'cp.id')
                 ->leftJoin('dc_orden_compra as oc', 'ra.id_orden_compra', '=', 'oc.id')
-                ->leftJoin('users as u', 'ra.id_usuario', '=', 'u.id')
+                ->leftJoin('dc_usuarios_plataforma as up', 'ra.id_usuario', '=', 'up.id')
                 ->leftJoin('dc_evidencias_almacen as ea', 'ea.id_almacen_producto', '=', 'ra.id')
-                ->where('ra.id_orden_compra', $request->id_orden_compra)
+                ->where('ra.id_canje', $request->id_canje)
                 ->get();
 
-            //$base = $productos->first();
             $base = $productos->sortBy('id_producto_almacen')->first();
 
             $resultado = [
@@ -156,19 +156,18 @@ class AlmacenController extends BaseController
                 'id_canje' => $base->id_canje,
                 'id_usuario' => $base->id_usuario,
                 'nombre_usuario' => $base->nombre_usuario,
-                'primer_apellido' => $base->primer_apellido,
-                'segundo_apellido' => $base->segundo_apellido,
                 'id_producto' => $base->id_producto,
                 'nombre_producto' => $base->nombre_producto,
                 'nombre_proveedor' => $base->nombre_proveedor,
                 'marca' => $base->marca,
                 'sku' => $base->sku,
                 'costo_sin_iva' => $base->costo_sin_iva,
+                'costo_con_iva' => $base->costo_con_iva,
                 'id_orden_compra' => $base->id_orden_compra,
                 'no_orden' => $base->no_orden,
                 'cantidad_producto' => $base->cantidad_producto,
                 'estatus' => $base->estatus,
-                'fecha' => $base->fecha,
+                'costo_envio_real' => $base->costo_envio_real,
                 'fecha_pago' => $base->fecha_pago,
                 'evidencias' => $base->evidencias,
                 'guia' => $base->guia,
@@ -180,20 +179,21 @@ class AlmacenController extends BaseController
 
                 // Detalle de cada registro por separado
                 'productos' => $productos
-                    ->filter(fn($p) => $p->precio_compra > 0)
+                    ->filter(fn($p) => $p->cantidad_almacen > 0)
                     ->map(fn($p) => [
                         'id_producto_almacen' => $p->id_producto_almacen,
                         'id_proveedor' => $p->id_proveedor,
                         'nombre_proveedor' => $p->nombre_proveedor,
-                        'nombre_producto_nuevo' => $p->nombre_producto_nuevo,
-                        'marca_nuevo' => $p->marca_nuevo,
-                        'sku_nuevo' => $p->sku_nuevo,
-                        'precio_compra' => $p->precio_compra,
+                        'nombre_producto_nuevo' => $p->nombre_producto_nuevo ?? $p->nombre_producto,
+                        'marca_nuevo' => $p->marca_nuevo ?? $p->marca,
+                        'sku_nuevo' => $p->sku_nuevo ?? $p->sku,
+                        'precio_compra' => $p->precio_compra ?? $p->costo_con_iva,
                         'cantidad_almacen' => $p->cantidad_almacen,
                         'imei' => $p->imei,
+                        'costo_envio_real' => $base->costo_envio_real,
+                        'fecha_pago' => $base->fecha_pago,
                         'no_serie' => $p->no_serie,
                         'comentarios' => $p->comentarios,
-                        //'evidencias'           => $p->evidencias,
                     ])->values()
             ];
 
@@ -224,7 +224,7 @@ class AlmacenController extends BaseController
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            $cantidadAlmacenActual = RecepcionAlmacen::where('id_orden_compra', $producto_almacen->id_orden_compra)
+            $cantidadAlmacenActual = RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
                 ->sum('cantidad_almacen');
 
             $nuevaCantidadAlmacen = $cantidadAlmacenActual + $request->cantidad_producto;
@@ -237,7 +237,8 @@ class AlmacenController extends BaseController
                     [
                         'cantidad_pendiente' => $cantidadTotal - $cantidadAlmacenActual,
                         'cantidad_recibida' => $cantidadAlmacenActual,
-                        'cantidad_total' => $cantidadTotal
+                        'cantidad_total' => $cantidadTotal,
+                        'nuevaCantidadAlmacen' => $nuevaCantidadAlmacen
                     ],
                     400
                 );
@@ -249,13 +250,15 @@ class AlmacenController extends BaseController
                 ? 'en_almacen'
                 : 'en_almacen_parcialmente';
 
-            if ($request->tipo_registro == "normal") {
+            if (!$request->filled('precio_compra')) {
                 $producto_almacen->update([
                     'id_proveedor' => $request->id_proveedor,
                     'cantidad_almacen' => $request->cantidad_producto,
                     'imei' => $request->imei,
                     'no_serie' => $request->no_serie,
                     'comentarios' => $request->comentarios,
+                    'precio_compra' => $producto_almacen->costo_con_iva,
+                    'fecha_compra' => $request->fecha_compra,
                     'estatus' => $estatus,
                 ]);
 
@@ -271,100 +274,6 @@ class AlmacenController extends BaseController
                     'id_usuario' => $user->id,
                 ];
             } else {
-                $datosProducto = CatalogoProductos::where('id', $request->id_producto)->first();
-
-                //datos del producto existente
-                $nombre_producto = $datosProducto->nombre_producto;
-                $descripcion = $datosProducto->descripcion;
-                $marca = $datosProducto->marca;
-                $sku = $datosProducto->sku;
-                $color = $datosProducto->color;
-                $talla = $datosProducto->talla;
-                $id_proveedor = $request->id_proveedor;
-                $id_catalogo = $datosProducto->id_catalogo;
-                $costo_con_iva = round($request->precio_compra * 1.16);
-                $costo_sin_iva = $request->precio_compra;
-                $costo_puntos_con_iva = $datosProducto->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = $datosProducto->costo_puntos_sin_iva;
-                $fee_brimagy = $datosProducto->fee_brimagy;
-                $subtotal = $datosProducto->subtotal;
-                $envio_base = $datosProducto->envio_base;
-                $costo_caja = $datosProducto->costo_caja;
-                $envio_extra = $datosProducto->envio_extra;
-                $total_envio = $datosProducto->total_envio;
-                $total = $datosProducto->total;
-                $puntos = $datosProducto->puntos;
-                $factor = $datosProducto->factor;
-                $id_plataforma = $datosProducto->id_plataforma;
-                $tipo_producto = $datosProducto->tipo_producto;
-
-                //primero insertamos el nuevo producto en la tabla awards de brimagy para obtener el nuevo id y relacionarla con nuestra tabla dc_catalogo_productos
-                if ($request->plataforma === 'club_bohn') {
-                    $productoTablaBrimagy = DB::connection('mysql_club_bohn')
-                        ->table('awards as a')
-                        ->where('a.id', $datosProducto->id_producto_brimagy)->first();
-
-                    $productoNuevoDesdeBrimagy = ProductoClub::create([
-                        'desc' => $productoTablaBrimagy->desc,
-                        'required_score' => $productoTablaBrimagy->required_score,
-                        'sub_category_id' => $productoTablaBrimagy->sub_category_id,
-                        'photo_name' => $productoTablaBrimagy->photo_name,
-                        'sku' => $productoTablaBrimagy->sku,
-                        'features' => $productoTablaBrimagy->features,
-                        'TyC' => $productoTablaBrimagy->TyC,
-                        'validity' => $productoTablaBrimagy->validity,
-                        'status' => $productoTablaBrimagy->status,
-                        'stock' => $productoTablaBrimagy->stock,
-                        'score_promotions' => $productoTablaBrimagy->score_promotions,
-                        'NEW' => $productoTablaBrimagy->NEW,
-                    ]);
-                } else {
-                    $productoTablaBrimagy = DB::connection('mysql_brimagy')
-                        ->table('awards as a')
-                        ->where('a.id', $datosProducto->id_producto_brimagy)->first();
-
-                    $productoNuevoDesdeBrimagy = ProductoBrimagy::create([
-                        'desc' => $productoTablaBrimagy->desc,
-                        'required_score' => $productoTablaBrimagy->required_score,
-                        'sub_category_id' => $productoTablaBrimagy->sub_category_id,
-                        'photo_name' => $productoTablaBrimagy->photo_name,
-                        'sku' => $productoTablaBrimagy->sku,
-                        'features' => $productoTablaBrimagy->features,
-                        'TyC' => $productoTablaBrimagy->TyC,
-                        'validity' => $productoTablaBrimagy->validity,
-                        'status' => $productoTablaBrimagy->status,
-                        'stock' => $productoTablaBrimagy->stock,
-                        'score_ambassadors' => $productoTablaBrimagy->score_ambassadors,
-                        'new' => $productoTablaBrimagy->new,
-                    ]);
-                }
-
-                $producto = CatalogoProductos::create([
-                    'nombre_producto' => $nombre_producto,
-                    'descripcion' => $descripcion,
-                    'marca' => $marca,
-                    'sku' => $sku,
-                    'color' => $color,
-                    'talla' => $talla,
-                    'id_proveedor' => $id_proveedor,
-                    'id_catalogo' => $id_catalogo,
-                    'costo_con_iva' => $costo_con_iva,
-                    'costo_sin_iva' => $costo_sin_iva,
-                    'costo_puntos_con_iva' => $costo_puntos_con_iva,
-                    'costo_puntos_sin_iva' => $costo_puntos_sin_iva,
-                    'fee_brimagy' => $fee_brimagy,
-                    'subtotal' => $subtotal,
-                    'envio_base' => $envio_base,
-                    'costo_caja' => $costo_caja,
-                    'envio_extra' => $envio_extra,
-                    'total_envio' => $total_envio,
-                    'total' => $total,
-                    'puntos' => $puntos,
-                    'factor' => $factor,
-                    'id_producto_brimagy' => $productoNuevoDesdeBrimagy->id,
-                    'id_plataforma' => $id_plataforma,
-                    'tipo_producto' => $tipo_producto,
-                ]);
 
                 $producto_almacen_nuevo = RecepcionAlmacen::create([
                     //datos que deben duplicarse
@@ -376,8 +285,9 @@ class AlmacenController extends BaseController
                     'fecha' => $producto_almacen->fecha,
                     'estatus' => $estatus,
                     //nuevos datos a insertar
-                    'id_producto_nuevo' => $producto->id,
+                    'id_producto_nuevo' => $producto_almacen->id_producto,
                     'precio_compra' => $request->precio_compra,
+                    'fecha_compra' => $request->fecha_compra,
                     'id_proveedor' => $request->id_proveedor,
                     'cantidad_almacen' => $request->cantidad_producto,
                     'imei' => $request->imei,
@@ -385,15 +295,23 @@ class AlmacenController extends BaseController
                     'comentarios' => $request->comentarios,
                 ]);
 
+                $producto_catalogo = CatalogoProductos::find($request->id_producto);
+
+                $producto_catalogo->update([
+                    'costo_con_iva' => $request->precio_compra,
+                    'costo_sin_iva' => $request->precio_compra / 1.16,
+                    'id_proveedor' => $request->id_proveedor,
+                ]);
+
                 $log = [
                     'evento' => 'Recepción de producto en almacén con nuevo precio',
-                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto->id} con un nuevo precio de {$request->precio_compra}.",
+                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto_almacen->id_producto} con un nuevo precio de {$request->precio_compra}.",
                     'id_usuario' => $user->id,
                 ];
             }
 
-            // Actualizar todos los registros con el mismo id_orden_compra
-            RecepcionAlmacen::where('id_orden_compra', $producto_almacen->id_orden_compra)
+            // Actualizar todos los registros con el mismo id_canje
+            RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
                 ->update(['estatus' => $estatus]);
 
             BitacoraEventos::create($log);
@@ -440,7 +358,7 @@ class AlmacenController extends BaseController
             $talla = $datosProducto->talla;
             $id_proveedor = $request->id_proveedor;
             $id_catalogo = $datosProducto->id_catalogo;
-            $costo_con_iva = round($request->precio_compra * 1.16);
+            $costo_con_iva = $request->precio_compra * 1.16;
             $costo_sin_iva = $request->precio_compra;
             $costo_puntos_con_iva = $datosProducto->costo_puntos_con_iva;
             $costo_puntos_sin_iva = $datosProducto->costo_puntos_sin_iva;
@@ -546,8 +464,9 @@ class AlmacenController extends BaseController
         DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
-                'id_orden_compra' => 'required|integer',
+                'id_canje' => 'required|integer',
                 'guia_producto' => 'required|string',
+                'costo_envio_real' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -555,23 +474,29 @@ class AlmacenController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $existe = RecepcionAlmacen::where('id_orden_compra', $request->id_orden_compra)->exists();
+            $existe = RecepcionAlmacen::where('id_canje', $request->id_canje)->exists();
 
             if (!$existe) {
                 DB::rollBack();
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            RecepcionAlmacen::where('id_orden_compra', $request->id_orden_compra)
+            RecepcionAlmacen::where('id_canje', $request->id_canje)
                 ->update([
                     'guia' => $request->guia_producto,
+                    'costo_envio_real' => $request->costo_envio_real,
                     'estatus' => 'guia_asignada',
                 ]);
 
             $user = Auth::user();
             BitacoraEventos::create([
                 'evento' => 'Se añadió una guía a un producto en almacen',
-                'descripcion' => "El usuario con id: {$user->id} añadió la guía {$request->guia_producto} a la orden {$request->id_orden_compra}",
+                'descripcion' => "El usuario con id: {$user->id} añadió la guía {$request->guia_producto} al canje {$request->id_canje} en almacén",
+                'id_usuario' => $user->id,
+            ]);
+            BitacoraEventos::create([
+                'evento' => 'Se añadió el costo de envio real',
+                'descripcion' => "El usuario con id: {$user->id} añadió el costo de envío real: {$request->costo_envio_real} al canje {$request->id_canje} en almacén",
                 'id_usuario' => $user->id,
             ]);
 

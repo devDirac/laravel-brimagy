@@ -31,6 +31,7 @@ class CatalogoProductos extends Model
         'total_envio',
         'total',
         'puntos',
+        'valor_factor',
         'factor',
         'foto_producto',
         'id_producto_brimagy',

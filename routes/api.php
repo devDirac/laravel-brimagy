@@ -181,6 +181,7 @@ Route::get('getEstadisticasCanjeados', [EstadisticasController::class, 'getEstad
 Route::get('getEstadisticasPuntosCategoria', [EstadisticasController::class, 'getEstadisticasPuntosCategoria'])->middleware($SANCTUM);
 Route::get('getEstadisticasPuntosPorTipoProducto', [EstadisticasController::class, 'getEstadisticasPuntosPorTipoProducto'])->middleware($SANCTUM);
 Route::get('getEstadisticasComparativa', [EstadisticasController::class, 'getEstadisticasComparativa'])->middleware($SANCTUM);
+Route::get('getReporteGeneralCanjes', [EstadisticasController::class, 'getReporteGeneralCanjes'])->middleware($SANCTUM);
 
 //USUARIOS DE PLATAFORMA
 Route::post('crearUsuarioPlataforma', [UserController::class, 'crearUsuarioPlataforma'])->middleware($SANCTUM);

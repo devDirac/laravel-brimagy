@@ -22,10 +22,12 @@ return new class extends Migration
             $table->integer('cantidad_almacen')->nullable();
             $table->integer('id_proveedor')->nullable();
             $table->integer('precio_compra')->nullable();
-            $table->date('fecha')->nullable();
+            $table->date('fecha_compra')->nullable();
+            $table->integer('costo_envio_real')->nullable();
+            $table->string('folio_factura')->nullable();
             $table->string('comentarios')->nullable();
             $table->enum('estatus', ['con_detalles', 'por_recibir', 'en_almacen', 'en_almacen_parcialmente', 'guia_asignada', 'enviado', 'entregado'])->default('por_recibir');
-            $table->string('mei')->nullable();
+            $table->string('imei')->nullable();
             $table->string('no_serie')->nullable();
             $table->string('guia')->nullable();
             $table->timestamps();

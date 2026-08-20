@@ -157,6 +157,9 @@ class CanjesController extends BaseController
 
             $canjeIdEncriptado = $this->encriptarCorto($canje->id);
             $plataformaEncriptada = $this->encriptarCorto($plataforma);
+
+            //$plataformaDesencriptada = $this->desencriptarCorto($plataforma);
+
             $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$plataformaEncriptada}";
 
             if ($codigo) {
@@ -233,7 +236,6 @@ class CanjesController extends BaseController
             $canjeIdEncriptado = $this->encriptarCorto($canje->id);
             $plataformaEncriptada = $this->encriptarCorto($plataforma);
             $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$plataformaEncriptada}";
-            //$urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}";
 
             if ($codigo) {
                 Mail::to($canjeData->email)->send(new SolicitarCodigo($canjeData, $codigo, $urlva));
@@ -251,103 +253,6 @@ class CanjesController extends BaseController
         }
     }
 
-    /*public function getCanjes(Request $request)
-    {
-        try {
-            $query = DB::table('swaps_view as sp')
-                ->leftJoin('dc_validacion_canje as vc', function ($join) {
-                    $join->on('vc.id_canje', '=', 'sp.id')
-                        ->whereRaw('vc.id = (SELECT MAX(id) FROM dc_validacion_canje WHERE id_canje = sp.id)');
-                })
-                ->select(
-                    'sp.id',
-                    'sp.folio',
-                    'sp.name as nombre_usuario',
-                    'sp.email',
-                    'sp.phone',
-                    'sp.number_of_awards',
-                    'sp.size',
-                    'sp.color',
-                    'sp.category',
-                    'sp.points_swap as puntos_canjeados',
-                    'sp.desc as nombre_premio',
-                    'sp.required_score as costo_premio',
-                    'sp.sku',
-                    'sp.street as calle',
-                    'sp.number as numero_calle',
-                    'sp.colony as colonia',
-                    'sp.postal_code as codigo_postal',
-                    'sp.municipality as municipio',
-                    'sp.inside as numero_interior',
-                    'sp.between_1',
-                    'sp.between_2',
-                    'sp.additional_reference as referencia_adicional',
-                    'sp.created_at as creacion_canje',
-                    'sp.status as estado_canje',
-                    'cdp.id as id_producto',
-                    'cdp.id_proveedor',
-                    'cdp.sku as sku_catalogo',
-                    DB::raw('(SELECT vc.estatus FROM dc_validacion_canje vc WHERE vc.id_canje = sp.id LIMIT 1) as estado_validacion')
-                )
-                ->leftJoin('dc_catalogo_productos as cdp', 'sp.award_id', '=', 'cdp.id_producto_brimagy')
-                ->where('cdp.tipo_producto', $request->tipo_producto);
-
-            // BÚSQUEDA
-            if ($request->has('search') && !empty($request->search)) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")
-                        ->orWhere('vc.estatus', 'LIKE', "%{$search}%");
-                });
-            }
-
-            // BÚSQUEDA POR FECHAS
-            if (
-                $request->has('fecha1') && !empty($request->fecha1) &&
-                $request->has('fecha2') && !empty($request->fecha2)
-            ) {
-
-                $fecha1 = Carbon::parse($request->fecha1);
-                $fecha2 = Carbon::parse($request->fecha2);
-
-                if ($fecha1->lt($fecha2)) {
-                    $inicio = $fecha1->copy()->startOfDay();
-                    $fin = $fecha2->copy()->endOfDay();
-                } else {
-                    $inicio = $fecha2->copy()->startOfDay();
-                    $fin = $fecha1->copy()->endOfDay();
-                }
-
-                $query->whereBetween('sp.created_at', [$inicio, $fin]);
-            }
-
-            // PLATAFORMA
-            if ($request->has('plataforma') && !empty($request->plataforma)) {
-
-                // Buscar plataforma por nombre
-                $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
-                $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
-                if (!$plataformaModel) {
-                    return $this->sendError('La plataforma "' . $plataforma . '" no existe', 'error', 404);
-                }
-                $id_plataforma = $plataformaModel->id;
-
-                $query->where(function ($q) use ($id_plataforma) {
-                    $q->where('cdp.id_plataforma', $id_plataforma);
-                });
-            }
-
-            $canjes = $query->orderBy('sp.created_at', 'desc')->get();
-
-            return $this->sendResponse($canjes);
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los canjes', $th, 500);
-        }
-    }*/
     public function getCanjes(Request $request)
     {
         try {
@@ -616,13 +521,15 @@ class CanjesController extends BaseController
                     ->first();
 
                 if ($canje) {
-                    $validacion = DB::table('dc_validacion_canje')
+                    $validacion = DB::table('dc_validacion_canje as vc')
                         ->where('id_canje', $idCanjeDesencriptado)
-                        ->orderBy('id', 'desc')
+                        ->leftJoin('dc_plataformas as p', 'vc.id_plataforma', '=', 'p.id')
+                        ->orderBy('vc.id', 'desc')
                         ->first();
 
                     $canje = (object) array_merge((array) $canje, [
                         'estado_validacion' => $validacion->estatus ?? null,
+                        'nombre_plataforma' => $validacion->nombre ?? null,
                         'codigo_validacion' => $validacion->codigo_validacion ?? null,
                     ]);
                 }
@@ -654,9 +561,11 @@ class CanjesController extends BaseController
                         'sp.created_at as creacion_canje',
                         'sp.status as estado_canje',
                         'vc.estatus as estado_validacion',
-                        'vc.codigo_validacion'
+                        'vc.codigo_validacion',
+                        'p.nombre as nombre_plataforma'
                     )
                     ->leftJoin('dc_validacion_canje as vc', 'vc.id_canje', '=', 'sp.id')
+                    ->leftJoin('dc_plataformas as p', 'p.id', '=', 'vc.id_plataforma')
                     ->where('sp.id', $idCanjeDesencriptado)
                     ->first();
             }
@@ -684,17 +593,10 @@ class CanjesController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $idPlataformaDesencriptado = $this->desencriptarCorto($request->plataforma);
-
-            $plataformaModel = Plataformas::where('nombre', $idPlataformaDesencriptado)->first();
-            if (!$plataformaModel) {
-                return $this->sendError('La plataforma no existe', null, 404);
-            }
-
-            $esClubBohn = $plataformaModel->nombre === 'club bohn';
-            $plataforma = $plataformaModel->nombre;
-
             $validacionExistente = ValidacionCanje::where('id_canje', $request->id)->first();
+
+            $esClubBohn = $request->nombre_plataforma === 'club bohn';
+            $plataforma = $request->nombre_plataforma;
 
             if ($validacionExistente && !empty($validacionExistente->visible)) {
                 DB::commit();
@@ -750,7 +652,6 @@ class CanjesController extends BaseController
                 ->where('codigo_validacion', '!=', '')
                 ->first();
 
-
             if (!$codigoVerificacion) {
                 return $this->sendError('Canje aún no validado', null, 404);
             }
@@ -777,13 +678,25 @@ class CanjesController extends BaseController
                     ]);
             }
 
-            $canje = DB::table('swaps_view')
-                ->where('id', $request->id_canje)
-                ->first();
+            $plataformaDesencriptada = $this->desencriptarCorto($request->plataforma);
+
+            $plataforma = $plataformaDesencriptada === "club_bohn" ? "club bohn" : $plataformaDesencriptada;
+
+            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
+                $canje = DB::connection('mysql_club_bohn')
+                    ->table('swaps_view')
+                    ->where('id', $request->id_canje)
+                    ->first();
+            } else {
+                $canje = DB::table('swaps_view')
+                    ->where('id', $request->id_canje)
+                    ->first();
+            }
+
             $validado = true;
 
             if ($validacion) {
-                $this->enviarWhatsApp($canje, null, $validado);
+                $this->enviarWhatsApp($canje, null, $validado, null, $plataforma);
                 $this->enviarCorreo($canje, null, $validado);
             }
 
@@ -807,6 +720,13 @@ class CanjesController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
+            $plataforma = $request->plataforma === "club_bohn" ? "club bohn" : $request->plataforma;
+
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma no existe', null, 404);
+            }
+
             $user = Auth::user();
             $validacion = ValidacionCanje::create([
                 'id_canje' => $request->id,
@@ -814,11 +734,10 @@ class CanjesController extends BaseController
                 'cantidad_producto' => $request->number_of_awards,
                 'id_proveedor' => $request->id_proveedor,
                 'id_usuario_admin' => $user->id,
+                'id_plataforma' => $plataformaModel->id,
                 'estatus' => 'identidad_validada',
                 'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
             ]);
-
-            $plataforma = $request->plataforma === "club_bohn" ? "club bohn" : "puntotes";
 
             if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
                 $canje = DB::connection('mysql_club_bohn')

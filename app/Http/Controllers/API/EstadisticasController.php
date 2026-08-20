@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\API\BaseController as BaseController;
+use App\Models\Plataformas;
 use App\Models\User;
 use App\Models\UserClub;
 use Illuminate\Http\Request;
@@ -96,9 +97,9 @@ class EstadisticasController extends BaseController
             $participantes_por_categoria = [];
             foreach ($tipo_usuario_map as $tipo => $nombre) {
                 $participantes_por_categoria[] = [
-                    'tipo'   => $tipo,
+                    'tipo' => $tipo,
                     'nombre' => $nombre,
-                    'total'  => $participantes_por_tipo->get($tipo)?->total ?? 0,
+                    'total' => $participantes_por_tipo->get($tipo)?->total ?? 0,
                 ];
             }
 
@@ -139,19 +140,19 @@ class EstadisticasController extends BaseController
             foreach ($tipo_usuario_map as $tipo => $nombre) {
                 $row = $stats_por_tipo->get($tipo);
 
-                $total_canjes   = (int) ($row?->total_canjes   ?? 0);
-                $canjes_fisico  = (int) ($row?->canjes_fisico  ?? 0);
+                $total_canjes = (int) ($row?->total_canjes ?? 0);
+                $canjes_fisico = (int) ($row?->canjes_fisico ?? 0);
                 $canjes_digital = (int) ($row?->canjes_digital ?? 0);
 
                 $puntos_por_usuario[] = [
-                    'tipo'               => $tipo,
-                    'nombre'             => $nombre,
-                    'total_puntos'       => $row?->total_puntos ?? 0,
-                    'total_canjes'       => $total_canjes,
-                    'canjes_fisico'      => $canjes_fisico,
-                    'canjes_digital'     => $canjes_digital,
-                    'porcentaje_fisico'  => $total_canjes > 0
-                        ? round(($canjes_fisico  / $total_canjes) * 100, 1)
+                    'tipo' => $tipo,
+                    'nombre' => $nombre,
+                    'total_puntos' => $row?->total_puntos ?? 0,
+                    'total_canjes' => $total_canjes,
+                    'canjes_fisico' => $canjes_fisico,
+                    'canjes_digital' => $canjes_digital,
+                    'porcentaje_fisico' => $total_canjes > 0
+                        ? round(($canjes_fisico / $total_canjes) * 100, 1)
                         : 0,
                     'porcentaje_digital' => $total_canjes > 0
                         ? round(($canjes_digital / $total_canjes) * 100, 1)
@@ -160,13 +161,13 @@ class EstadisticasController extends BaseController
             }
 
             $resultado = [
-                'participantes'            => $participantes,
-                'puntos_canjeados'         => $puntos_canjeados,
-                'puntos_sobrantes'         => $puntos_sobrantes,
-                'puntos_acumulados'        => $puntos_acumulados,
-                'canjes'                   => $canjes,
+                'participantes' => $participantes,
+                'puntos_canjeados' => $puntos_canjeados,
+                'puntos_sobrantes' => $puntos_sobrantes,
+                'puntos_acumulados' => $puntos_acumulados,
+                'canjes' => $canjes,
                 'participantes_por_categoria' => $participantes_por_categoria,
-                'puntos_por_usuario'     => $puntos_por_usuario,
+                'puntos_por_usuario' => $puntos_por_usuario,
             ];
 
             return $this->sendResponse($resultado);
@@ -250,8 +251,8 @@ class EstadisticasController extends BaseController
                 $puntos_sobrantes += $swap->puntos_canjeados;
             }
 
-            $swap->fecha_validacion   = $validacion?->updated_at;
-            $swap->estado_validacion  = $validacion?->estatus;
+            $swap->fecha_validacion = $validacion?->updated_at;
+            $swap->estado_validacion = $validacion?->estatus;
             $canjes[] = $swap;
 
             $tipo = $usersClub->get($swap->user_id)?->tipo_usuario;
@@ -261,9 +262,9 @@ class EstadisticasController extends BaseController
 
             if (!isset($statsPorTipo[$tipo])) {
                 $statsPorTipo[$tipo] = [
-                    'total_puntos'   => 0,
-                    'total_canjes'   => 0,
-                    'canjes_fisico'  => 0,
+                    'total_puntos' => 0,
+                    'total_canjes' => 0,
+                    'canjes_fisico' => 0,
                     'canjes_digital' => 0,
                 ];
             }
@@ -294,9 +295,9 @@ class EstadisticasController extends BaseController
         $participantes_por_categoria = [];
         foreach ($tipo_usuario_map as $tipo => $nombre) {
             $participantes_por_categoria[] = [
-                'tipo'   => $tipo,
+                'tipo' => $tipo,
                 'nombre' => $nombre,
-                'total'  => $participantes_por_tipo->get($tipo)?->count() ?? 0,
+                'total' => $participantes_por_tipo->get($tipo)?->count() ?? 0,
             ];
         }
 
@@ -305,19 +306,19 @@ class EstadisticasController extends BaseController
         foreach ($tipo_usuario_map as $tipo => $nombre) {
             $row = $statsPorTipo[$tipo] ?? null;
 
-            $total_canjes   = (int) ($row['total_canjes']   ?? 0);
-            $canjes_fisico  = (int) ($row['canjes_fisico']  ?? 0);
+            $total_canjes = (int) ($row['total_canjes'] ?? 0);
+            $canjes_fisico = (int) ($row['canjes_fisico'] ?? 0);
             $canjes_digital = (int) ($row['canjes_digital'] ?? 0);
 
             $puntos_por_usuario[] = [
-                'tipo'               => $tipo,
-                'nombre'             => $nombre,
-                'total_puntos'       => $row['total_puntos'] ?? 0,
-                'total_canjes'       => $total_canjes,
-                'canjes_fisico'      => $canjes_fisico,
-                'canjes_digital'     => $canjes_digital,
-                'porcentaje_fisico'  => $total_canjes > 0
-                    ? round(($canjes_fisico  / $total_canjes) * 100, 1)
+                'tipo' => $tipo,
+                'nombre' => $nombre,
+                'total_puntos' => $row['total_puntos'] ?? 0,
+                'total_canjes' => $total_canjes,
+                'canjes_fisico' => $canjes_fisico,
+                'canjes_digital' => $canjes_digital,
+                'porcentaje_fisico' => $total_canjes > 0
+                    ? round(($canjes_fisico / $total_canjes) * 100, 1)
                     : 0,
                 'porcentaje_digital' => $total_canjes > 0
                     ? round(($canjes_digital / $total_canjes) * 100, 1)
@@ -326,13 +327,13 @@ class EstadisticasController extends BaseController
         }
 
         return [
-            'participantes'                => $participantes,
-            'puntos_canjeados'              => $puntos_canjeados,
-            'puntos_sobrantes'              => $puntos_sobrantes,
-            'puntos_acumulados'             => $puntos_acumulados,
-            'canjes'                        => collect($canjes)->sortByDesc('creacion_canje')->values(),
-            'participantes_por_categoria'   => $participantes_por_categoria,
-            'puntos_por_usuario'            => $puntos_por_usuario,
+            'participantes' => $participantes,
+            'puntos_canjeados' => $puntos_canjeados,
+            'puntos_sobrantes' => $puntos_sobrantes,
+            'puntos_acumulados' => $puntos_acumulados,
+            'canjes' => collect($canjes)->sortByDesc('creacion_canje')->values(),
+            'participantes_por_categoria' => $participantes_por_categoria,
+            'puntos_por_usuario' => $puntos_por_usuario,
         ];
     }
 
@@ -501,7 +502,8 @@ class EstadisticasController extends BaseController
         if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
             $inicio = \Carbon\Carbon::parse($request->fecha_inicio)->startOfDay();
             $fin = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
-            if ($inicio->gt($fin)) [$inicio, $fin] = [$fin, $inicio];
+            if ($inicio->gt($fin))
+                [$inicio, $fin] = [$fin, $inicio];
             $query->whereBetween('sp.created_at', [$inicio, $fin]);
         } elseif ($request->filled('fecha_inicio')) {
             $query->whereDate('sp.created_at', '>=', $request->fecha_inicio);
@@ -524,16 +526,16 @@ class EstadisticasController extends BaseController
         foreach ($swaps as $swap) {
             $producto = $this->matchProducto($catalogoPorSku, $catalogoPorDescTalla, $swap->sku, $swap->nombre_premio, $swap->size);
 
-            $swap->id_producto       = $producto->id ?? null;
-            $swap->tipo_producto     = $producto->tipo_producto ?? null;
-            $swap->id_proveedor      = $producto->id_proveedor ?? null;
-            $swap->sku_catalogo      = $producto->sku ?? null;
+            $swap->id_producto = $producto->id ?? null;
+            $swap->tipo_producto = $producto->tipo_producto ?? null;
+            $swap->id_proveedor = $producto->id_proveedor ?? null;
+            $swap->sku_catalogo = $producto->sku ?? null;
             $swap->estado_validacion = $validaciones->get($swap->id)?->estatus;
         }
 
-        $fisicos   = $swaps->where('tipo_producto', 'fisico')->values();
+        $fisicos = $swaps->where('tipo_producto', 'fisico')->values();
         $digitales = $swaps->where('tipo_producto', 'digital')->values();
-        $sinTipo   = $swaps->filter(fn($r) => !in_array($r->tipo_producto, ['fisico', 'digital']))->values();
+        $sinTipo = $swaps->filter(fn($r) => !in_array($r->tipo_producto, ['fisico', 'digital']))->values();
 
         return [
             'total' => $swaps->count(),
@@ -658,7 +660,8 @@ class EstadisticasController extends BaseController
         if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
             $inicio = \Carbon\Carbon::parse($request->fecha_inicio)->startOfDay();
             $fin = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
-            if ($inicio->gt($fin)) [$inicio, $fin] = [$fin, $inicio];
+            if ($inicio->gt($fin))
+                [$inicio, $fin] = [$fin, $inicio];
             $query->whereBetween('sp.created_at', [$inicio, $fin]);
         } elseif ($request->filled('fecha_inicio')) {
             $query->whereDate('sp.created_at', '>=', $request->fecha_inicio);
@@ -673,17 +676,17 @@ class EstadisticasController extends BaseController
         foreach ($swaps as $swap) {
             $producto = $this->matchProducto($catalogoPorSku, $catalogoPorDescTalla, $swap->sku, $swap->nombre_premio, $swap->size);
 
-            $swap->id_producto      = $producto->id ?? null;
-            $swap->tipo_producto    = $producto->tipo_producto ?? null;
-            $swap->id_categoria     = $producto->id_catalogo ?? null;
+            $swap->id_producto = $producto->id ?? null;
+            $swap->tipo_producto = $producto->tipo_producto ?? null;
+            $swap->id_categoria = $producto->id_catalogo ?? null;
             $swap->nombre_categoria = $producto->nombre_categoria ?? null;
         }
 
-        $fisicos   = $swaps->where('tipo_producto', 'fisico')->values();
+        $fisicos = $swaps->where('tipo_producto', 'fisico')->values();
         $digitales = $swaps->where('tipo_producto', 'digital')->values();
 
         return [
-            'fisicos'   => $this->resumenPorTipo($fisicos),
+            'fisicos' => $this->resumenPorTipo($fisicos),
             'digitales' => $this->resumenPorTipo($digitales),
         ];
     }
@@ -692,9 +695,9 @@ class EstadisticasController extends BaseController
     {
         try {
             $validator = Validator::make($request->all(), [
-                'agrupacion'   => 'sometimes|in:mensual,anual',
+                'agrupacion' => 'sometimes|in:mensual,anual',
                 'fecha_inicio' => 'sometimes|nullable|date',
-                'fecha_fin'    => 'sometimes|nullable|date',
+                'fecha_fin' => 'sometimes|nullable|date',
             ]);
 
             if ($validator->fails()) {
@@ -735,7 +738,7 @@ class EstadisticasController extends BaseController
             // Filtro por fechas
             if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
                 $inicio = \Carbon\Carbon::parse($request->fecha_inicio)->startOfDay();
-                $fin    = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
+                $fin = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
 
                 if ($inicio->gt($fin)) {
                     [$inicio, $fin] = [$fin, $inicio];
@@ -765,8 +768,8 @@ class EstadisticasController extends BaseController
                 $p = $row->periodo;
                 if (!isset($periodos[$p])) {
                     $periodos[$p] = [
-                        'periodo'        => $p,
-                        'fisico'  => ['total_canjes' => 0, 'total_puntos' => 0],
+                        'periodo' => $p,
+                        'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
                         'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                         'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
                     ];
@@ -782,8 +785,8 @@ class EstadisticasController extends BaseController
             }
 
             $resumen = [
-                'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                 'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
             ];
 
@@ -796,8 +799,8 @@ class EstadisticasController extends BaseController
 
             return $this->sendResponse([
                 'agrupacion' => $agrupacion,
-                'resumen'    => $resumen,
-                'datos'      => array_values($periodos),
+                'resumen' => $resumen,
+                'datos' => array_values($periodos),
 
             ]);
         } catch (\Throwable $th) {
@@ -814,8 +817,9 @@ class EstadisticasController extends BaseController
 
         if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
             $inicio = \Carbon\Carbon::parse($request->fecha_inicio)->startOfDay();
-            $fin    = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
-            if ($inicio->gt($fin)) [$inicio, $fin] = [$fin, $inicio];
+            $fin = \Carbon\Carbon::parse($request->fecha_fin)->endOfDay();
+            if ($inicio->gt($fin))
+                [$inicio, $fin] = [$fin, $inicio];
             $query->whereBetween('sv.created_at', [$inicio, $fin]);
         } elseif ($request->filled('fecha_inicio')) {
             $query->whereDate('sv.created_at', '>=', $request->fecha_inicio);
@@ -835,14 +839,14 @@ class EstadisticasController extends BaseController
                 $tipo = 'sin_clasificar';
             }
 
-            $fecha   = \Carbon\Carbon::parse($swap->created_at);
+            $fecha = \Carbon\Carbon::parse($swap->created_at);
             $periodo = $agrupacion === 'anual' ? $fecha->format('Y') : $fecha->format('Y-m');
 
             if (!isset($periodos[$periodo])) {
                 $periodos[$periodo] = [
-                    'periodo'        => $periodo,
-                    'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                    'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                    'periodo' => $periodo,
+                    'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                    'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                     'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
                 ];
             }
@@ -854,8 +858,8 @@ class EstadisticasController extends BaseController
         ksort($periodos);
 
         $resumen = [
-            'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-            'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+            'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+            'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
             'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
         ];
 
@@ -868,8 +872,8 @@ class EstadisticasController extends BaseController
 
         return [
             'agrupacion' => $agrupacion,
-            'resumen'    => $resumen,
-            'datos'      => array_values($periodos),
+            'resumen' => $resumen,
+            'datos' => array_values($periodos),
         ];
     }
 
@@ -878,9 +882,9 @@ class EstadisticasController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'periodo1_inicio' => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
-                'periodo1_fin'    => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
+                'periodo1_fin' => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
                 'periodo2_inicio' => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
-                'periodo2_fin'    => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
+                'periodo2_fin' => ['sometimes', 'nullable', 'regex:/^\d{4}-\d{2}(-\d{2})?$/'],
             ]);
 
             if ($validator->fails()) {
@@ -897,13 +901,13 @@ class EstadisticasController extends BaseController
                 return $fecha;
             };
 
-            $anioActual   = now()->year;
+            $anioActual = now()->year;
             $anioAnterior = $anioActual - 1;
 
-            $p1Inicio = $request->filled('periodo1_inicio') ? $completarFecha($request->periodo1_inicio, true)  : "{$anioAnterior}-01-01";
-            $p1Fin    = $request->filled('periodo1_fin')    ? $completarFecha($request->periodo1_fin, false)    : "{$anioAnterior}-12-31";
-            $p2Inicio = $request->filled('periodo2_inicio') ? $completarFecha($request->periodo2_inicio, true)  : "{$anioActual}-01-01";
-            $p2Fin    = $request->filled('periodo2_fin')    ? $completarFecha($request->periodo2_fin, false)    : now()->format('Y-m-d');
+            $p1Inicio = $request->filled('periodo1_inicio') ? $completarFecha($request->periodo1_inicio, true) : "{$anioAnterior}-01-01";
+            $p1Fin = $request->filled('periodo1_fin') ? $completarFecha($request->periodo1_fin, false) : "{$anioAnterior}-12-31";
+            $p2Inicio = $request->filled('periodo2_inicio') ? $completarFecha($request->periodo2_inicio, true) : "{$anioActual}-01-01";
+            $p2Fin = $request->filled('periodo2_fin') ? $completarFecha($request->periodo2_fin, false) : now()->format('Y-m-d');
 
             if ($request->plataforma === 'club_bohn') {
                 return $this->sendResponse(
@@ -914,7 +918,8 @@ class EstadisticasController extends BaseController
             $queryPeriodo = function (string $inicio, string $fin) {
                 $ini = \Carbon\Carbon::parse($inicio)->startOfDay();
                 $fin = \Carbon\Carbon::parse($fin)->endOfDay();
-                if ($ini->gt($fin)) [$ini, $fin] = [$fin, $ini];
+                if ($ini->gt($fin))
+                    [$ini, $fin] = [$fin, $ini];
 
                 return DB::table('swaps_view as sv')
                     ->leftJoin('dc_catalogo_productos as cdp', function ($join) {
@@ -942,8 +947,8 @@ class EstadisticasController extends BaseController
 
             $resumir = function ($rows) {
                 $resumen = [
-                    'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                    'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                    'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                    'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                     'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
                 ];
                 $porUsuario = [];
@@ -968,15 +973,15 @@ class EstadisticasController extends BaseController
                 $usuariosFinal = [];
                 foreach ($tipoMap as $tipo => $nombre) {
                     $usuariosFinal[] = [
-                        'tipo'         => $tipo,
-                        'nombre'       => $nombre,
+                        'tipo' => $tipo,
+                        'nombre' => $nombre,
                         'total_canjes' => $porUsuario[$tipo]['total_canjes'] ?? 0,
                         'total_puntos' => $porUsuario[$tipo]['total_puntos'] ?? 0,
                     ];
                 }
 
                 return [
-                    'resumen'     => $resumen,
+                    'resumen' => $resumen,
                     'por_usuario' => $usuariosFinal,
                 ];
             };
@@ -985,15 +990,15 @@ class EstadisticasController extends BaseController
                 $porMes = [];
 
                 foreach ($rows as $row) {
-                    $mes  = $row->mes;
+                    $mes = $row->mes;
                     $tipo = in_array($row->tipo_producto, ['fisico', 'digital'])
                         ? $row->tipo_producto
                         : 'sin_clasificar';
 
                     if (!isset($porMes[$mes])) {
                         $porMes[$mes] = [
-                            'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                            'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                            'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                            'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                             'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
                         ];
                     }
@@ -1021,7 +1026,7 @@ class EstadisticasController extends BaseController
                 $d1 = $meses1[$mes] ?? null;
                 $d2 = $meses2[$mes] ?? null;
 
-                $sumar       = fn($data) => $data
+                $sumar = fn($data) => $data
                     ? $data['fisico']['total_puntos'] + $data['digital']['total_puntos'] + $data['sin_clasificar']['total_puntos']
                     : 0;
                 $sumarCanjes = fn($data) => $data
@@ -1029,19 +1034,19 @@ class EstadisticasController extends BaseController
                     : 0;
 
                 return [
-                    'mes'      => $mes,
+                    'mes' => $mes,
                     'periodo1' => $d1 ? [
-                        'total_puntos'          => $sumar($d1),
-                        'total_canjes'          => $sumarCanjes($d1),
-                        'fisico_puntos'         => $d1['fisico']['total_puntos'],
-                        'digital_puntos'        => $d1['digital']['total_puntos'],
+                        'total_puntos' => $sumar($d1),
+                        'total_canjes' => $sumarCanjes($d1),
+                        'fisico_puntos' => $d1['fisico']['total_puntos'],
+                        'digital_puntos' => $d1['digital']['total_puntos'],
                         'sin_clasificar_puntos' => $d1['sin_clasificar']['total_puntos'],
                     ] : null,
                     'periodo2' => $d2 ? [
-                        'total_puntos'          => $sumar($d2),
-                        'total_canjes'          => $sumarCanjes($d2),
-                        'fisico_puntos'         => $d2['fisico']['total_puntos'],
-                        'digital_puntos'        => $d2['digital']['total_puntos'],
+                        'total_puntos' => $sumar($d2),
+                        'total_canjes' => $sumarCanjes($d2),
+                        'fisico_puntos' => $d2['fisico']['total_puntos'],
+                        'digital_puntos' => $d2['digital']['total_puntos'],
                         'sin_clasificar_puntos' => $d2['sin_clasificar']['total_puntos'],
                     ] : null,
                 ];
@@ -1050,15 +1055,15 @@ class EstadisticasController extends BaseController
             return $this->sendResponse([
                 'periodo1' => [
                     'fecha_inicio' => $p1Inicio,
-                    'fecha_fin'    => $p1Fin,
-                    'resumen'      => $p1['resumen'],
-                    'por_usuario'  => $p1['por_usuario'],
+                    'fecha_fin' => $p1Fin,
+                    'resumen' => $p1['resumen'],
+                    'por_usuario' => $p1['por_usuario'],
                 ],
                 'periodo2' => [
                     'fecha_inicio' => $p2Inicio,
-                    'fecha_fin'    => $p2Fin,
-                    'resumen'      => $p2['resumen'],
-                    'por_usuario'  => $p2['por_usuario'],
+                    'fecha_fin' => $p2Fin,
+                    'resumen' => $p2['resumen'],
+                    'por_usuario' => $p2['por_usuario'],
                 ],
                 'comparativa' => $comparativa,
             ]);
@@ -1074,7 +1079,8 @@ class EstadisticasController extends BaseController
         $queryPeriodo = function (string $inicio, string $fin) use ($catalogoPorSku, $catalogoPorDescTalla) {
             $ini = \Carbon\Carbon::parse($inicio)->startOfDay();
             $fin = \Carbon\Carbon::parse($fin)->endOfDay();
-            if ($ini->gt($fin)) [$ini, $fin] = [$fin, $ini];
+            if ($ini->gt($fin))
+                [$ini, $fin] = [$fin, $ini];
 
             $rows = DB::connection('mysql_club_bohn')
                 ->table('swaps_view as sv')
@@ -1101,8 +1107,8 @@ class EstadisticasController extends BaseController
 
         $resumir = function ($rows) {
             $resumen = [
-                'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                 'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
             ];
             $porUsuario = [];
@@ -1126,8 +1132,8 @@ class EstadisticasController extends BaseController
             $usuariosFinal = [];
             foreach ($tipoMap as $tipo => $nombre) {
                 $usuariosFinal[] = [
-                    'tipo'         => $tipo,
-                    'nombre'       => $nombre,
+                    'tipo' => $tipo,
+                    'nombre' => $nombre,
                     'total_canjes' => $porUsuario[$tipo]['total_canjes'] ?? 0,
                     'total_puntos' => $porUsuario[$tipo]['total_puntos'] ?? 0,
                 ];
@@ -1139,13 +1145,13 @@ class EstadisticasController extends BaseController
         $resumirPorMes = function ($rows) {
             $porMes = [];
             foreach ($rows as $row) {
-                $mes  = $row->mes;
+                $mes = $row->mes;
                 $tipo = in_array($row->tipo_producto, ['fisico', 'digital']) ? $row->tipo_producto : 'sin_clasificar';
 
                 if (!isset($porMes[$mes])) {
                     $porMes[$mes] = [
-                        'fisico'         => ['total_canjes' => 0, 'total_puntos' => 0],
-                        'digital'        => ['total_canjes' => 0, 'total_puntos' => 0],
+                        'fisico' => ['total_canjes' => 0, 'total_puntos' => 0],
+                        'digital' => ['total_canjes' => 0, 'total_puntos' => 0],
                         'sin_clasificar' => ['total_canjes' => 0, 'total_puntos' => 0],
                     ];
                 }
@@ -1173,23 +1179,23 @@ class EstadisticasController extends BaseController
             $d1 = $meses1[$mes] ?? null;
             $d2 = $meses2[$mes] ?? null;
 
-            $sumar       = fn($data) => $data ? $data['fisico']['total_puntos'] + $data['digital']['total_puntos'] + $data['sin_clasificar']['total_puntos'] : 0;
+            $sumar = fn($data) => $data ? $data['fisico']['total_puntos'] + $data['digital']['total_puntos'] + $data['sin_clasificar']['total_puntos'] : 0;
             $sumarCanjes = fn($data) => $data ? $data['fisico']['total_canjes'] + $data['digital']['total_canjes'] + $data['sin_clasificar']['total_canjes'] : 0;
 
             return [
-                'mes'      => $mes,
+                'mes' => $mes,
                 'periodo1' => $d1 ? [
-                    'total_puntos'          => $sumar($d1),
-                    'total_canjes'          => $sumarCanjes($d1),
-                    'fisico_puntos'         => $d1['fisico']['total_puntos'],
-                    'digital_puntos'        => $d1['digital']['total_puntos'],
+                    'total_puntos' => $sumar($d1),
+                    'total_canjes' => $sumarCanjes($d1),
+                    'fisico_puntos' => $d1['fisico']['total_puntos'],
+                    'digital_puntos' => $d1['digital']['total_puntos'],
                     'sin_clasificar_puntos' => $d1['sin_clasificar']['total_puntos'],
                 ] : null,
                 'periodo2' => $d2 ? [
-                    'total_puntos'          => $sumar($d2),
-                    'total_canjes'          => $sumarCanjes($d2),
-                    'fisico_puntos'         => $d2['fisico']['total_puntos'],
-                    'digital_puntos'        => $d2['digital']['total_puntos'],
+                    'total_puntos' => $sumar($d2),
+                    'total_canjes' => $sumarCanjes($d2),
+                    'fisico_puntos' => $d2['fisico']['total_puntos'],
+                    'digital_puntos' => $d2['digital']['total_puntos'],
                     'sin_clasificar_puntos' => $d2['sin_clasificar']['total_puntos'],
                 ] : null,
             ];
@@ -1210,6 +1216,368 @@ class EstadisticasController extends BaseController
             ],
             'comparativa' => $comparativa,
         ];
+    }
+
+    public function getReporteGeneralCanjes(Request $request)
+    {
+        try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            if ($request->has('plataforma') && $request->plataforma === 'club_bohn') {
+                return $this->getReporteCanjesClubBohn($request);
+            }
+
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            //puntotes
+            $query = DB::table('swaps_view as sv')
+                ->select(
+                    'sv.api_id',
+                    'sv.name as nombre',
+                    'sv.phone as telefono',
+                    'sv.email as correo',
+                    'sv.street as calle',
+                    'sv.number as no_ext',
+                    'sv.inside as no_int',
+                    'sv.colony as colonia',
+                    'sv.municipality as municipio_delegacion',
+                    'sv.postal_code as codigo_postal',
+                    DB::raw("CONCAT(sv.between_1, ' ', sv.between_2) as entre_calles"),
+                    'sv.additional_reference as referencia_adicional',
+                    'sv.folio as folio_canje',
+                    'sv.category as categoria',
+                    'sv.sub_category as subcategoria',
+                    'cdp.nombre_producto as premio',
+                    'cdp.sku',
+                    'sv.size as talla',
+                    'sv.color',
+                    'sv.number_of_awards as premios_canjeados',
+                    'sv.required_score as puntos_premio',
+                    'sv.points_swap as puntos_canjeados',
+                    'sv.created_at as fecha_canje',
+                    'ra.fecha_compra',
+                    'ra.folio_factura',
+                    'cdp.marca',
+                    'ra.imei',
+                    'cdp.costo_puntos_sin_iva as precio_sin_iva_puntos_prespuestado',
+                    'cdp.costo_sin_iva as precio_sin_iva_proveedor_prespuestado',
+                    'ra.precio_compra',
+                    DB::raw("(ra.precio_compra / 1.16) as precio_compra_sin_iva"),
+                    'cdp.fee_brimagy',
+                    DB::raw("(cdp.costo_puntos_sin_iva - COALESCE((ra.precio_compra / 1.16), 0)) as diferencia_precio_usuario"),
+                    DB::raw("(cdp.costo_sin_iva - COALESCE((ra.precio_compra / 1.16), 0)) as diferencia_precio_proveedor"),
+                    DB::raw("(cdp.costo_puntos_sin_iva * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) as fee_presupuestado_puntos"),
+                    DB::raw("(cdp.costo_sin_iva * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) as fee_presupuestado_proveedor_puntos"),
+                    DB::raw("((ra.precio_compra / 1.16) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) as fee_real"),
+                    DB::raw("((cdp.costo_puntos_sin_iva - (ra.precio_compra / 1.16)) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) as diferencia_precio_usuario_2"),
+                    DB::raw("((cdp.costo_sin_iva - (ra.precio_compra / 1.16)) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) as diferencia_precio_proveedor_2"),
+                    'cdp.envio_base as envio_presupuestado',
+                    'ra.costo_envio_real',
+                    DB::raw("(cdp.envio_base - ra.costo_envio_real) as diferencia_envio"),
+                    DB::raw("(cdp.costo_puntos_sin_iva + (cdp.costo_puntos_sin_iva * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + cdp.envio_base) as total_presupuestado_puntos"),
+                    DB::raw("(cdp.costo_sin_iva + (cdp.costo_sin_iva * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + cdp.envio_base) as total_presupuestado_proveedor_puntos"),
+                    DB::raw("(cdp.costo_sin_iva + (cdp.costo_sin_iva * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + ra.costo_envio_real) as total_real"),
+                    DB::raw("((cdp.costo_puntos_sin_iva - COALESCE((ra.precio_compra / 1.16), 0)) + ((cdp.costo_puntos_sin_iva - (ra.precio_compra / 1.16)) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + (cdp.envio_base - ra.costo_envio_real)) as total_diferencia_puntos_usuario"),
+                    DB::raw("((cdp.costo_sin_iva - COALESCE((ra.precio_compra / 1.16), 0)) + ((cdp.costo_sin_iva - (ra.precio_compra / 1.16)) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + (cdp.envio_base - ra.costo_envio_real)) as total_diferencia_puntos_proveedor"),
+                )
+                ->leftJoin('dc_catalogo_productos as cdp', 'sv.award_id', '=', 'cdp.id_producto_brimagy')
+                ->leftJoin('dc_recepcion_almacen as ra', 'ra.id_canje', '=', 'sv.id')
+                ->where('cdp.id_plataforma', $id_plataforma);
+
+            $reporte = $query->orderBy('ra.created_at', 'desc')->get();
+
+            $totales = [
+                'precio_sin_iva_puntos_prespuestado' => $reporte->sum('precio_sin_iva_puntos_prespuestado'),
+                'precio_sin_iva_proveedor_prespuestado' => $reporte->sum('precio_sin_iva_proveedor_prespuestado'),
+                'precio_compra_sin_iva' => $reporte->sum('precio_compra_sin_iva'),
+                'diferencia_precio_usuario' => $reporte->sum('diferencia_precio_usuario'),
+                'diferencia_precio_proveedor' => $reporte->sum('diferencia_precio_proveedor'),
+                'fee_presupuestado_puntos' => $reporte->sum('fee_presupuestado_puntos'),
+                'fee_presupuestado_proveedor_puntos' => $reporte->sum('fee_presupuestado_proveedor_puntos'),
+                'fee_real' => $reporte->sum('fee_real'),
+                'diferencia_precio_usuario_2' => $reporte->sum('diferencia_precio_usuario_2'),
+                'diferencia_precio_proveedor_2' => $reporte->sum('diferencia_precio_proveedor_2'),
+                'envio_presupuestado' => $reporte->sum('envio_presupuestado'),
+                'costo_envio_real' => $reporte->sum('costo_envio_real'),
+                'diferencia_envio' => $reporte->sum('diferencia_envio'),
+                'total_presupuestado_puntos' => $reporte->sum('total_presupuestado_puntos'),
+                'total_presupuestado_proveedor_puntos' => $reporte->sum('total_presupuestado_proveedor_puntos'),
+                'total_real' => $reporte->sum('total_real'),
+                'total_diferencia_puntos_usuario' => $reporte->sum('total_diferencia_puntos_usuario'),
+                'total_diferencia_puntos_proveedor' => $reporte->sum('total_diferencia_puntos_proveedor'),
+            ];
+
+            $pct = function ($numerador, $denominador) {
+                if (!$denominador) {
+                    return 0;
+                }
+                return round(($numerador / $denominador) * 100, 2);
+            };
+
+            $totales['ahorro_precio_puntos_global'] = $pct(
+                $totales['diferencia_precio_usuario'],
+                $totales['precio_sin_iva_puntos_prespuestado']
+            );
+
+            $totales['ahorro_precio_proveedor_global'] = $pct(
+                $totales['diferencia_precio_proveedor'],
+                $totales['precio_sin_iva_proveedor_prespuestado']
+            );
+
+            $totales['ahorro_fee_puntos_global'] = $pct(
+                $totales['diferencia_precio_usuario_2'],
+                $totales['fee_presupuestado_puntos']
+            );
+
+            $totales['ahorro_fee_proveedor_global'] = $pct(
+                $totales['diferencia_precio_proveedor_2'],
+                $totales['fee_presupuestado_proveedor_puntos']
+            );
+
+            $totales['ahorro_envio_proveedor_global'] = $pct(
+                $totales['diferencia_envio'],
+                $totales['envio_presupuestado']
+            );
+
+            $totales['ahorro_usuario_global'] = $pct(
+                $totales['total_diferencia_puntos_usuario'],
+                $totales['total_presupuestado_puntos']
+            );
+
+            $totales['ahorro_proveedor_global'] = $pct(
+                $totales['total_diferencia_puntos_proveedor'],
+                $totales['total_presupuestado_proveedor_puntos']
+            );
+
+            return $this->sendResponse($reporte);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener el reporte', $th, 500);
+        }
+    }
+    private function getReporteCanjesClubBohn(Request $request)
+    {
+        try {
+            $plataformaModel = Plataformas::where('nombre', 'club bohn')->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma club_bohn no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            // 1. swaps_view viene de la conexión club_bohn
+            $swaps = DB::connection('mysql_club_bohn')
+                ->table('swaps_view as sv')
+                ->select(
+                    'sv.id',
+                    'sv.api_id',
+                    'sv.name as nombre',
+                    'sv.phone as telefono',
+                    'sv.email as correo',
+                    'sv.street as calle',
+                    'sv.number as no_ext',
+                    'sv.inside as no_int',
+                    'sv.colony as colonia',
+                    'sv.municipality as municipio_delegacion',
+                    'sv.postal_code as codigo_postal',
+                    DB::raw("CONCAT(sv.between_1, ' ', sv.between_2) as entre_calles"),
+                    'sv.additional_reference as referencia_adicional',
+                    'sv.folio as folio_canje',
+                    'sv.category as categoria',
+                    'sv.sub_category as subcategoria',
+                    'sv.size as talla',
+                    'sv.color',
+                    'sv.number_of_awards as premios_canjeados',
+                    'sv.required_score as puntos_premio',
+                    'sv.points_swap as puntos_canjeados',
+                    'sv.created_at as fecha_canje',
+                    'sv.award_id'
+                )
+                ->orderBy('sv.created_at', 'desc')
+                ->get();
+
+            if ($swaps->isEmpty()) {
+                return $this->sendResponse(['detalle' => collect(), 'totales' => []]);
+            }
+
+            $awardIds = $swaps->pluck('award_id')->filter()->unique()->values();
+
+            $catalogo = DB::table('dc_catalogo_productos as cdp')
+                ->where('cdp.id_plataforma', $id_plataforma)
+                ->whereIn('cdp.id_producto_brimagy', $awardIds)
+                ->select(
+                    'cdp.id_producto_brimagy',
+                    'cdp.nombre_producto as premio',
+                    'cdp.sku',
+                    'cdp.marca',
+                    'cdp.costo_puntos_sin_iva as precio_sin_iva_puntos_prespuestado',
+                    'cdp.costo_sin_iva as precio_sin_iva_proveedor_prespuestado',
+                    'cdp.fee_brimagy',
+                    'cdp.envio_base as envio_presupuestado'
+                )
+                ->get()
+                ->keyBy('id_producto_brimagy');
+
+            $swapIds = $swaps->pluck('id')->unique()->values();
+
+            $recepciones = DB::table('dc_recepcion_almacen as ra')
+                ->whereIn('ra.id_canje', $swapIds)
+                ->select(
+                    'ra.id_canje',
+                    'ra.fecha_compra',
+                    'ra.folio_factura',
+                    'ra.imei',
+                    'ra.precio_compra',
+                    'ra.costo_envio_real'
+                )
+                ->get()
+                ->keyBy('id_canje');
+
+            $reporte = $swaps->map(function ($swap) use ($catalogo, $recepciones) {
+                $producto = $catalogo->get($swap->award_id);
+                $recepcion = $recepciones->get($swap->id);
+
+                $costo_puntos_sin_iva = $producto->precio_sin_iva_puntos_prespuestado ?? null;
+                $costo_sin_iva = $producto->precio_sin_iva_proveedor_prespuestado ?? null;
+                $fee_brimagy = $producto->fee_brimagy ?? 0;
+                $envio_base = $producto->envio_presupuestado ?? null;
+
+                $precio_compra = $recepcion->precio_compra ?? null;
+                $costo_envio_real = $recepcion->costo_envio_real ?? null;
+                $precio_compra_sin_iva = $precio_compra !== null ? ($precio_compra / 1.16) : null;
+
+                $fee_factor = ($fee_brimagy ?? 0) / 100.0;
+
+                $diferencia_precio_usuario = $costo_puntos_sin_iva !== null
+                    ? $costo_puntos_sin_iva - ($precio_compra_sin_iva ?? 0)
+                    : null;
+
+                $diferencia_precio_proveedor = $costo_sin_iva !== null
+                    ? $costo_sin_iva - ($precio_compra_sin_iva ?? 0)
+                    : null;
+
+                $fee_presupuestado_puntos = $costo_puntos_sin_iva !== null
+                    ? $costo_puntos_sin_iva * $fee_factor
+                    : null;
+
+                $fee_presupuestado_proveedor_puntos = $costo_sin_iva !== null
+                    ? $costo_sin_iva * $fee_factor
+                    : null;
+
+                $fee_real = $precio_compra_sin_iva !== null
+                    ? $precio_compra_sin_iva * $fee_factor
+                    : null;
+
+                $diferencia_precio_usuario_2 = ($costo_puntos_sin_iva !== null && $precio_compra_sin_iva !== null)
+                    ? ($costo_puntos_sin_iva - $precio_compra_sin_iva) * $fee_factor
+                    : null;
+
+                $diferencia_precio_proveedor_2 = ($costo_sin_iva !== null && $precio_compra_sin_iva !== null)
+                    ? ($costo_sin_iva - $precio_compra_sin_iva) * $fee_factor
+                    : null;
+
+                $diferencia_envio = ($envio_base !== null && $costo_envio_real !== null)
+                    ? $envio_base - $costo_envio_real
+                    : null;
+
+                $total_presupuestado_puntos = $costo_puntos_sin_iva !== null
+                    ? $costo_puntos_sin_iva + ($costo_puntos_sin_iva * $fee_factor) + ($envio_base ?? 0)
+                    : null;
+
+                $total_presupuestado_proveedor_puntos = $costo_sin_iva !== null
+                    ? $costo_sin_iva + ($costo_sin_iva * $fee_factor) + ($envio_base ?? 0)
+                    : null;
+
+                $total_real = $costo_sin_iva !== null
+                    ? $costo_sin_iva + ($costo_sin_iva * $fee_factor) + ($costo_envio_real ?? 0)
+                    : null;
+
+                $total_diferencia_puntos_usuario = ($diferencia_precio_usuario !== null && $diferencia_precio_usuario_2 !== null && $diferencia_envio !== null)
+                    ? $diferencia_precio_usuario + $diferencia_precio_usuario_2 + $diferencia_envio
+                    : null;
+
+                $total_diferencia_puntos_proveedor = ($diferencia_precio_proveedor !== null && $diferencia_precio_proveedor_2 !== null && $diferencia_envio !== null)
+                    ? $diferencia_precio_proveedor + $diferencia_precio_proveedor_2 + $diferencia_envio
+                    : null;
+
+                return (object) array_merge((array) $swap, [
+                    'premio' => $producto->premio ?? null,
+                    'sku' => $producto->sku ?? null,
+                    'marca' => $producto->marca ?? null,
+                    'precio_sin_iva_puntos_prespuestado' => $costo_puntos_sin_iva,
+                    'precio_sin_iva_proveedor_prespuestado' => $costo_sin_iva,
+                    'fee_brimagy' => $fee_brimagy,
+                    'envio_presupuestado' => $envio_base,
+                    'fecha_compra' => $recepcion->fecha_compra ?? null,
+                    'folio_factura' => $recepcion->folio_factura ?? null,
+                    'imei' => $recepcion->imei ?? null,
+                    'precio_compra' => $precio_compra,
+                    'precio_compra_sin_iva' => $precio_compra_sin_iva,
+                    'costo_envio_real' => $costo_envio_real,
+                    'diferencia_precio_usuario' => $diferencia_precio_usuario,
+                    'diferencia_precio_proveedor' => $diferencia_precio_proveedor,
+                    'fee_presupuestado_puntos' => $fee_presupuestado_puntos,
+                    'fee_presupuestado_proveedor_puntos' => $fee_presupuestado_proveedor_puntos,
+                    'fee_real' => $fee_real,
+                    'diferencia_precio_usuario_2' => $diferencia_precio_usuario_2,
+                    'diferencia_precio_proveedor_2' => $diferencia_precio_proveedor_2,
+                    'diferencia_envio' => $diferencia_envio,
+                    'total_presupuestado_puntos' => $total_presupuestado_puntos,
+                    'total_presupuestado_proveedor_puntos' => $total_presupuestado_proveedor_puntos,
+                    'total_real' => $total_real,
+                    'total_diferencia_puntos_usuario' => $total_diferencia_puntos_usuario,
+                    'total_diferencia_puntos_proveedor' => $total_diferencia_puntos_proveedor,
+                ]);
+            });
+
+            $totales = [
+                'precio_sin_iva_puntos_prespuestado' => $reporte->sum('precio_sin_iva_puntos_prespuestado'),
+                'precio_sin_iva_proveedor_prespuestado' => $reporte->sum('precio_sin_iva_proveedor_prespuestado'),
+                'precio_compra_sin_iva' => $reporte->sum('precio_compra_sin_iva'),
+                'diferencia_precio_usuario' => $reporte->sum('diferencia_precio_usuario'),
+                'diferencia_precio_proveedor' => $reporte->sum('diferencia_precio_proveedor'),
+                'fee_presupuestado_puntos' => $reporte->sum('fee_presupuestado_puntos'),
+                'fee_presupuestado_proveedor_puntos' => $reporte->sum('fee_presupuestado_proveedor_puntos'),
+                'fee_real' => $reporte->sum('fee_real'),
+                'diferencia_precio_usuario_2' => $reporte->sum('diferencia_precio_usuario_2'),
+                'diferencia_precio_proveedor_2' => $reporte->sum('diferencia_precio_proveedor_2'),
+                'envio_presupuestado' => $reporte->sum('envio_presupuestado'),
+                'costo_envio_real' => $reporte->sum('costo_envio_real'),
+                'diferencia_envio' => $reporte->sum('diferencia_envio'),
+                'total_presupuestado_puntos' => $reporte->sum('total_presupuestado_puntos'),
+                'total_presupuestado_proveedor_puntos' => $reporte->sum('total_presupuestado_proveedor_puntos'),
+                'total_real' => $reporte->sum('total_real'),
+                'total_diferencia_puntos_usuario' => $reporte->sum('total_diferencia_puntos_usuario'),
+                'total_diferencia_puntos_proveedor' => $reporte->sum('total_diferencia_puntos_proveedor'),
+            ];
+
+            $pct = function ($numerador, $denominador) {
+                if (!$denominador) {
+                    return 0;
+                }
+                return round(($numerador / $denominador) * 100, 2);
+            };
+
+            $totales['ahorro_precio_puntos_global'] = $pct($totales['diferencia_precio_usuario'], $totales['precio_sin_iva_puntos_prespuestado']);
+            $totales['ahorro_precio_proveedor_global'] = $pct($totales['diferencia_precio_proveedor'], $totales['precio_sin_iva_proveedor_prespuestado']);
+            $totales['ahorro_fee_puntos_global'] = $pct($totales['diferencia_precio_usuario_2'], $totales['fee_presupuestado_puntos']);
+            $totales['ahorro_fee_proveedor_global'] = $pct($totales['diferencia_precio_proveedor_2'], $totales['fee_presupuestado_proveedor_puntos']);
+            $totales['ahorro_envio_proveedor_global'] = $pct($totales['diferencia_envio'], $totales['envio_presupuestado']);
+
+            $totales['ahorro_usuario_global'] = $pct($totales['total_diferencia_puntos_usuario'], $totales['total_presupuestado_puntos']);
+            $totales['ahorro_proveedor_global'] = $pct($totales['total_diferencia_puntos_proveedor'], $totales['total_presupuestado_proveedor_puntos']);
+
+            return $this->sendResponse([
+                'detalle' => $reporte->values(),
+                'totales' => $totales,
+            ]);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener el reporte de club bohn', $th, 500);
+        }
     }
 
     private function resumenPorTipo($coleccion)

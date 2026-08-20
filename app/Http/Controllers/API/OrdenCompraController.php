@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
 use App\Mail\EnvioCotizacion;
+use App\Mail\EnvioOrdenCompra;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
@@ -153,15 +154,15 @@ class OrdenCompraController extends BaseController
                 ->count();
 
             if ($sinProveedorCount > 0 || $ordenessinProveedorCount > 0) {
-                $proveedores->prepend((object)[
-                    'id'               => null,
-                    'nombre'           => 'Sin proveedor',
-                    'razon_social'     => null,
-                    'descripcion'      => 'Canjes validados sin proveedor asignado',
-                    'nombre_contacto'  => null,
-                    'telefono'         => null,
-                    'correo'           => null,
-                    'total_canjes'     => $sinProveedorCount,
+                $proveedores->prepend((object) [
+                    'id' => null,
+                    'nombre' => 'Sin proveedor',
+                    'razon_social' => null,
+                    'descripcion' => 'Canjes validados sin proveedor asignado',
+                    'nombre_contacto' => null,
+                    'telefono' => null,
+                    'correo' => null,
+                    'total_canjes' => $sinProveedorCount,
                     'total_ordenes_compra' => $ordenessinProveedorCount,
                 ]);
             }
@@ -493,6 +494,12 @@ class OrdenCompraController extends BaseController
     {
         DB::beginTransaction();
 
+        $cotizacion = null;
+        $proveedor = null;
+        $usuario = null;
+        $estado = null;
+        $productosCompletos = [];
+
         try {
             $validator = Validator::make($request->all(), [
                 'id_usuario' => 'required|integer|exists:users,id',
@@ -512,6 +519,7 @@ class OrdenCompraController extends BaseController
             $plataforma = $request->plataforma === "club_bohn" ? "club bohn" : $request->plataforma;
             $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
             if (!$plataformaModel) {
+                DB::rollBack();
                 return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
             }
             $id_plataforma = $plataformaModel->id;
@@ -540,8 +548,6 @@ class OrdenCompraController extends BaseController
                 ->get()
                 ->keyBy('id');
 
-            $productosCompletos = [];
-
             foreach ($request->productos as $productoRequest) {
                 $producto = $productosData->get($productoRequest['id_producto']);
 
@@ -551,13 +557,9 @@ class OrdenCompraController extends BaseController
 
                 $precioUnitario = $producto->costo_sin_iva ?? 0;
                 $cantidad = $productoRequest['cantidad_producto'] ?? 0;
-                $porcentajeDescuento = $producto->fee_brimagy ?? 0;
-
                 $subtotalSinDescuento = $precioUnitario * $cantidad;
-                $descuentoEnPesos = $subtotalSinDescuento * ($porcentajeDescuento / 100);
-                $subtotalConDescuento = $subtotalSinDescuento - $descuentoEnPesos;
-                $iva = $subtotalConDescuento * 0.16;
-                $importeTotal = $subtotalConDescuento + $iva;
+                $iva = $subtotalSinDescuento * 0.16;
+                $importeTotal = $subtotalSinDescuento + $iva;
 
                 $productosCompletos[$productoRequest['id_producto']] = [
                     'id_canje' => $productoRequest['id_canje'],
@@ -565,8 +567,7 @@ class OrdenCompraController extends BaseController
                     'sku' => $producto->sku,
                     'cantidad_producto' => $cantidad,
                     'precio_unitario' => $precioUnitario,
-                    'porcentaje_descuento' => $porcentajeDescuento,
-                    'subtotal' => $subtotalConDescuento,
+                    'subtotal' => $subtotalSinDescuento,
                     'iva' => $iva,
                     'importe_total' => $importeTotal,
                     'estatus_proveedor' => $productoRequest['estatus_proveedor'] ?? 0,
@@ -597,18 +598,18 @@ class OrdenCompraController extends BaseController
                 ->update([
                     'no_orden' => $numeroOrden,
                 ]);
+
             if ($request->tipo_envio == "directo") {
                 $orden_compra = OrdenCompra::find($cotizacion->id);
-                // Decodificar productos
                 $productosOrden = json_decode($orden_compra->productos_canje, true);
 
                 if (!$productosOrden || !is_array($productosOrden)) {
+                    DB::rollBack();
                     return $this->sendError('No se encontraron productos en la orden', null, 404);
                 }
 
                 $productosIds = array_keys($productosOrden);
 
-                // Obtener los datos completos de los productos desde dc_catalogo_productos
                 $canjesData = DB::table('dc_catalogo_productos as cdp')
                     ->select(
                         'cdp.id',
@@ -628,7 +629,6 @@ class OrdenCompraController extends BaseController
                     ->get()
                     ->keyBy('id');
 
-                // Insertar cada producto en la tabla de recepción de almacén
                 foreach ($productosOrden as $idProducto => $productoOrden) {
                     $canjeData = $canjesData->get($idProducto);
 
@@ -636,7 +636,6 @@ class OrdenCompraController extends BaseController
                         continue;
                     }
 
-                    // Solo guardar productos aceptados
                     if (isset($productoOrden['estatus_proveedor']) && $productoOrden['estatus_proveedor'] == 1) {
                         $almacen = [
                             'id_canje' => $productoOrden['id_canje'] ?? $canjeData->id_canje,
@@ -659,17 +658,6 @@ class OrdenCompraController extends BaseController
                     }
                 }
             }
-            if ($cotizacion) {
-                $productosArray = array_values($productosCompletos);
-
-                if ($request->tipo_envio == "directo") {
-                    $tipo = 'directo';
-                    $this->enviarWhatsApp($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden, $tipo);
-                } else {
-                    $this->enviarWhatsApp($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden);
-                    $this->enviarCorreo($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden);
-                }
-            }
 
             $user = Auth::user();
             $log['evento'] = 'Envío de cotización para proveedor';
@@ -678,13 +666,27 @@ class OrdenCompraController extends BaseController
             BitacoraEventos::create($log);
 
             DB::commit();
-
-            return $this->sendResponse($cotizacion, 'Cotización enviada exitosamente.');
         } catch (\Throwable $th) {
             DB::rollBack();
-
             return $this->sendError('Error al enviar la cotización', $th->getMessage(), 500);
         }
+
+        if ($cotizacion) {
+            try {
+                $productosArray = array_values($productosCompletos);
+
+                if ($request->tipo_envio == "directo") {
+                    $this->enviarWhatsApp($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden, 'directo');
+                } else {
+                    $this->enviarWhatsApp($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden);
+                    $this->enviarCorreo($productosArray, $proveedor, $usuario, $estado, $cotizacion->no_orden);
+                }
+            } catch (\Throwable $th) {
+                Log::error('Error al enviar notificaciones de cotización (orden ya creada, id: ' . $cotizacion->id . '): ' . $th->getMessage());
+            }
+        }
+
+        return $this->sendResponse($cotizacion, 'Cotización enviada exitosamente.');
     }
 
     private function generarNumeroOrdenUnico()
@@ -755,7 +757,24 @@ class OrdenCompraController extends BaseController
                 $mensaje .= "💰 *Total General: $" . number_format($totalGeneral, 2) . "*\n\n";
                 $mensaje .= "🔗 Link para revisar y confirmar:\n{$urlva}\n\n";
 
-                //$this->whatsappService->sendMessage($telefonoProveedor, $titulo);
+                $this->whatsappService->sendMessage($telefonoProveedor, $mensaje);
+            } else if ($estado === "orden_compra_enviada_a_proveedor" && $tipo !== 'directo') {
+
+                $mensaje = "Se le ha enviado una orden de compra para su validación:\n\n";
+                $mensaje .= "📦 *Premios:*\n";
+
+                $totalGeneral = 0;
+                foreach ($canje as $producto) {
+                    $mensaje .= "• {$producto['nombre_producto']}\n";
+                    $mensaje .= "  Cantidad: {$producto['cantidad_producto']}\n";
+                    $mensaje .= "  Precio: $" . number_format($producto['precio_unitario'], 2) . "\n";
+                    $mensaje .= "  Total: $" . number_format($producto['importe_total'], 2) . "\n\n";
+                    $totalGeneral += $producto['importe_total'];
+                }
+
+                $mensaje .= "💰 *Total: $" . number_format($totalGeneral, 2) . "*\n\n";
+                $mensaje .= "🔗 Link de la orden: \n{$urlva}\n\n";
+
                 $this->whatsappService->sendMessage($telefonoProveedor, $mensaje);
             } else if ($tipo == 'directo') {
 
@@ -796,7 +815,7 @@ class OrdenCompraController extends BaseController
             $ordenIdEncriptado = $this->encriptarCorto($no_orden);
             $urlva = config('app.url_frontend') . "/validar-ordencompra/{$ordenIdEncriptado}";
 
-            $productosData = (object)[
+            $productosData = (object) [
                 'productos' => $canje,
                 'total_general' => $totalGeneral,
                 'total_iva' => $totalIva,
@@ -805,6 +824,8 @@ class OrdenCompraController extends BaseController
 
             if ($estado === "cotizacion_enviada_a_proveedor") {
                 Mail::to($correoProveedor)->send(new EnvioCotizacion($productosData, $urlva));
+            } else if ($estado === "orden_compra_enviada_a_proveedor") {
+                Mail::to($correoProveedor)->send(new EnvioOrdenCompra($productosData, $urlva));
             }
             Log::info("Correo enviado correctamente");
         } catch (\Exception $e) {
@@ -1117,7 +1138,6 @@ class OrdenCompraController extends BaseController
                 return $this->sendError('El proveedor no existe', 'error', 404);
             }
 
-            // Decodificar productos
             $productosOrden = json_decode($orden_compra->productos_canje, true);
 
             if (!$productosOrden || !is_array($productosOrden)) {
@@ -1126,7 +1146,6 @@ class OrdenCompraController extends BaseController
 
             $productosIds = array_keys($productosOrden);
 
-            // Obtener los datos completos de los productos desde dc_catalogo_productos
             $canjesData = DB::table('dc_catalogo_productos as cdp')
                 ->select(
                     'cdp.id',
@@ -1140,13 +1159,17 @@ class OrdenCompraController extends BaseController
                     'cdp.fee_brimagy',
                     'cdp.costo_sin_iva',
                     'cdp.costo_con_iva',
+                    'cdp.envio_base',
+                    'cdp.costo_caja',
+                    'cdp.envio_extra'
                 )
                 ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
                 ->whereIn('cdp.id', $productosIds)
                 ->get()
                 ->keyBy('id');
 
-            // Insertar cada producto en la tabla de recepción de almacén
+            $productosParaEnvio = [];
+
             foreach ($productosOrden as $idProducto => $productoOrden) {
                 $canjeData = $canjesData->get($idProducto);
 
@@ -1154,8 +1177,11 @@ class OrdenCompraController extends BaseController
                     continue;
                 }
 
-                // Solo guardar productos aceptados
                 if (isset($productoOrden['estatus_proveedor']) && $productoOrden['estatus_proveedor'] == 1) {
+                    $productosParaEnvio[] = array_merge((array) $canjeData, $productoOrden);
+
+                    $total_envio = $canjeData->envio_base + $canjeData->costo_caja + $canjeData->envio_extra;
+
                     $almacen = [
                         'id_canje' => $productoOrden['id_canje'] ?? $canjeData->id_canje,
                         'id_usuario' => $orden_compra->id_usuario,
@@ -1165,7 +1191,8 @@ class OrdenCompraController extends BaseController
                         'cantidad_almacen' => 0,
                         'id_proveedor' => $request->id_proveedor,
                         'precio_compra' => $productoOrden['precio_unitario'] ?? null,
-                        'fecha' => now(),
+                        'fecha_compra' => null,
+                        'costo_envio_real' => $total_envio,
                         'comentarios' => "",
                         'guia' => "",
                         'cantidad' => $productoOrden['cantidad_producto'] ?? 1,
@@ -1177,9 +1204,17 @@ class OrdenCompraController extends BaseController
                 }
             }
 
+            $estado = 'orden_compra_enviada_a_proveedor';
             $orden_compra->update([
-                'estatus' => 'orden_compra_enviada_a_proveedor',
+                'estatus' => $estado,
             ]);
+
+            if (!empty($productosParaEnvio)) {
+                $this->enviarWhatsApp($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
+                $this->enviarCorreo($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
+            }
+            //$this->enviarWhatsApp($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
+            //$this->enviarCorreo($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
 
             DB::commit();
 
@@ -1192,6 +1227,11 @@ class OrdenCompraController extends BaseController
             return $this->sendResponse($orden_compra);
         } catch (\Throwable $th) {
             DB::rollBack();
+            /*return response()->json([
+                'success' => false,
+                'message' => 'Error al subir las fotos',
+                'error' => $th->getMessage()
+            ], 500);*/
             return $this->sendError('Error al enviar la orden de compra a proveedor', $th->getMessage(), 500);
         }
     }
@@ -1398,13 +1438,28 @@ class OrdenCompraController extends BaseController
             $carpetaProveedor = $idProveedor ?? 'sin-proveedor';
 
             $rutaArchivo = $archivoFactura->storeAs(
-                'facturas/' . $carpetaProveedor, // Organizar por proveedor
+                'facturas/' . $carpetaProveedor,
                 $nombreUnico,
-                'private' // Disco privado
+                'private'
             );
 
+            //$orden_compra = OrdenCompra::find($request->id_orden_compra);
+            $orden_compra = OrdenCompra::lockForUpdate()->find($request->id_orden_compra);
+
+            if (!$orden_compra) {
+                DB::rollBack();
+                return $this->sendError('Esta orden de compra no existe', 'error', 404);
+            }
+
+            // LOG temporal
+            Log::info('Orden encontrada justo antes del insert', [
+                'id' => $orden_compra->id,
+                'connection' => $orden_compra->getConnectionName(),
+                'timestamp' => now()->toDateTimeString(),
+            ]);
+
             $factura = Facturas::create([
-                'id_orden_compra' => $request->id_orden_compra,
+                'id_orden_compra' => $orden_compra->id,
                 'id_proveedor' => $idProveedor,
                 'id_usuario' => $request->id_usuario,
                 'nombre_factura' => $nombreFactura,
@@ -1412,13 +1467,6 @@ class OrdenCompraController extends BaseController
                 'url_factura' => $rutaArchivo,
                 'estatus' => "sin_pagar",
             ]);
-
-            $orden_compra = OrdenCompra::find($request->id_orden_compra);
-
-            if (!$orden_compra) {
-                DB::rollBack();
-                return $this->sendError('Esta orden de compra no existe', 'error', 404);
-            }
 
             $orden_compra->update([
                 'estatus' => 'xml_validado_correctamente_proveedor',
@@ -1432,6 +1480,12 @@ class OrdenCompraController extends BaseController
             ]);
         } catch (\Throwable $th) {
             DB::rollBack();
+            return response()->json([
+                'error' => 'Ocurrió un error',
+                'message' => $th->getMessage(),
+                'line' => $th->getLine(),
+                'file' => $th->getFile(),
+            ], 500);
             return $this->sendError('Error al validar la factura', $th->getMessage(), 500);
         }
     }

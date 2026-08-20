@@ -28,6 +28,7 @@ use App\Models\FotosProductoClub;
 use App\Models\Plataformas;
 use App\Models\ProductoBrimagy;
 use App\Models\ProductoClub;
+use App\Models\ProductoEditado;
 use App\Models\SubCategoria;
 use App\Models\SubCategoriaClub;
 use App\Models\Tallas;
@@ -120,52 +121,58 @@ class ProductosController extends BaseController
 
             if (!$variables) {
                 $fee_brimagy = 0;
+                $envio_base = 0;
+                $costo_caja = 0;
+
                 switch ($nombre_plataforma) {
                     case "club bohn":
                         $fee_brimagy = 15;
+                        $envio_base = 180;
+                        $costo_caja = 19;
                         break;
                     case "puntotes":
                         $fee_brimagy = 12;
+                        $envio_base = 180;
+                        $costo_caja = 19;
                         break;
                     default:
                         break;
                 }
                 $costo_proveedor_con_iva = $request->costo_con_iva;
-                $costo_proveedor_sin_iva = round($costo_proveedor_con_iva / 1.16);
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
                 $costo_puntos_con_iva = $request->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = round($costo_puntos_con_iva / 1.16);
+                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
 
-                $envio_base = 180;
-                $costo_caja = 19;
                 $envio_extra = $request->envio_extra;
+                $valor_factor = $request->valor_factor;
+
                 $porcentaje = (float) $fee_brimagy / 100;
-                $valor_con_fee = round(
-                    (float) $costo_puntos_sin_iva * $porcentaje
-                );
-                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio = round($envio_base + $costo_caja + $envio_extra);
-                $total = round($subtotal + $total_envio);
+                $valor_con_fee = (float) $costo_puntos_sin_iva * $porcentaje;
+                $subtotal = $costo_puntos_sin_iva + $valor_con_fee;
+                $total_envio = $envio_base + $costo_caja + $envio_extra;
+                $total = $subtotal + $total_envio;
                 $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
-                $puntos = round($redondeo * 15); //factor en bd
+                $puntos = $valor_factor == 0 ? round($total) : round($total * $valor_factor); //factor en bd
             } else {
                 $costo_proveedor_con_iva = $request->costo_con_iva;
-                $costo_proveedor_sin_iva = round($costo_proveedor_con_iva / 1.16);
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
                 $costo_puntos_con_iva = $request->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = round($costo_puntos_con_iva / 1.16);
+                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
 
                 $fee_brimagy = $variables->fee_brimagy;
                 $envio_base = $variables->envio_base;
                 $costo_caja = $variables->costo_caja;
                 $envio_extra = $variables->envio_extra;
+                $valor_factor = $variables->factor;
+
                 $porcentaje = (float) $fee_brimagy / 100;
-                $valor_con_fee = round(
-                    (float) $costo_puntos_sin_iva * $porcentaje
-                );
-                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio = round($envio_base + $costo_caja + $envio_extra);
-                $total = round($subtotal + $total_envio);
+                $valor_con_fee = (float) $costo_puntos_sin_iva * $porcentaje;
+                $subtotal = $costo_puntos_sin_iva + $valor_con_fee;
+                $total_envio = $envio_base + $costo_caja + $envio_extra;
+                $total = $subtotal + $total_envio;
                 $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
-                $puntos = round($redondeo * 15); //factor en bd
+                $puntos = $valor_factor == 0 ? round($total)
+                    : round($total * $valor_factor); //factor en bd
             }
 
             //Subir la foto
@@ -193,17 +200,7 @@ class ProductosController extends BaseController
             }
 
             if ($productoExistente) {
-                $fee_brimagy = 0;
-                switch ($nombre_plataforma) {
-                    case "club bohn":
-                        $fee_brimagy = 15;
-                        break;
-                    case "puntotes":
-                        $fee_brimagy = 12;
-                        break;
-                    default:
-                        break;
-                }
+
                 $nombreUnico = $productoExistente->foto_producto;
 
                 $valoresAnteriores = [
@@ -215,6 +212,7 @@ class ProductosController extends BaseController
                     'total_envio' => $productoExistente->total_envio,
                     'total' => $productoExistente->total,
                     'puntos' => $productoExistente->puntos,
+                    'valor_factor' => $productoExistente->valor_factor,
                     'factor' => $productoExistente->factor,
                     'costo_con_iva' => $productoExistente->costo_con_iva,
                     'costo_sin_iva' => $productoExistente->costo_sin_iva,
@@ -223,22 +221,23 @@ class ProductosController extends BaseController
                 ];
 
                 $fee_brimagy = $variables ? $variables->fee_brimagy : ($request->fee_brimagy ?? $fee_brimagy);
-                $envio_base = $variables ? $variables->envio_base : 180;
-                $costo_caja = $variables ? $variables->costo_caja : 19;
+                $envio_base = $variables ? $variables->envio_base : $envio_base;
+                $costo_caja = $variables ? $variables->costo_caja : $costo_caja;
                 $envio_extra = $variables ? $variables->envio_extra : ($request->envio_extra ?? $productoExistente->envio_extra);
+                $valor_factor = $variables ? $variables->factor : ($request->valor_factor ?? $productoExistente->valor_factor);
 
                 $costo_proveedor_con_iva = $request->costo_con_iva ?? $productoExistente->costo_con_iva;
-                $costo_proveedor_sin_iva = round($costo_proveedor_con_iva / 1.16);
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
                 $costo_puntos_con_iva = $request->costo_puntos_con_iva ?? $productoExistente->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = round($costo_puntos_con_iva / 1.16);
+                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
 
                 $porcentaje = (float) $fee_brimagy / 100;
-                $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
-                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio = round($envio_base + $costo_caja + $envio_extra);
-                $total = round($subtotal + $total_envio);
+                $valor_con_fee = (float) $costo_puntos_sin_iva * $porcentaje;
+                $subtotal = $costo_puntos_sin_iva + $valor_con_fee;
+                $total_envio = $envio_base + $costo_caja + $envio_extra;
+                $total = $subtotal + $total_envio;
                 $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
-                $puntos = round($redondeo * 15); //factor en bd
+                $puntos = $valor_factor == 0 ? round($total) : round($total * $valor_factor); //factor en bd
 
                 $valoresNuevos = [
                     'fee_brimagy' => $fee_brimagy,
@@ -249,6 +248,7 @@ class ProductosController extends BaseController
                     'total_envio' => $total_envio,
                     'total' => $total,
                     'puntos' => $redondeo,
+                    'valor_factor' => $valor_factor,
                     'factor' => $puntos,
                     'costo_con_iva' => $costo_proveedor_con_iva,
                     'costo_sin_iva' => $costo_proveedor_sin_iva,
@@ -284,6 +284,7 @@ class ProductosController extends BaseController
                     'total_envio' => $total_envio,
                     'total' => $total,
                     'puntos' => $redondeo,
+                    'valor_factor' => $valor_factor,
                     'factor' => $puntos,
                     'foto_producto' => $nombreUnico,
                     'id_producto_brimagy' => $request->id_producto_brimagy,
@@ -407,6 +408,7 @@ class ProductosController extends BaseController
                 'total_envio' => $total_envio,
                 'total' => $total,
                 'puntos' => $redondeo,
+                'valor_factor' => $valor_factor,
                 'factor' => $puntos,
                 'foto_producto' => $nombreUnico,
                 'id_producto_brimagy' => $producto_brimagy->id ?? $producto_brimagy_existente->id,
@@ -1020,7 +1022,7 @@ class ProductosController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'costo_sin_iva' => 'required|integer',
+                'costo_con_iva' => 'required|integer',
                 'id_producto' => 'required|integer',
                 'id_validacion' => 'required|integer',
                 'id_proveedor' => 'required|integer',
@@ -1042,8 +1044,8 @@ class ProductosController extends BaseController
             $talla = $datosProducto->talla;
             $id_proveedor = $request->id_proveedor;
             $id_catalogo = $datosProducto->id_catalogo;
-            $costo_con_iva = round($request->costo_sin_iva * 1.16);
-            $costo_sin_iva = $request->costo_sin_iva;
+            $costo_con_iva = $request->costo_con_iva;
+            $costo_sin_iva = $request->costo_con_iva / 1.16;
             $costo_puntos_con_iva = $datosProducto->costo_puntos_con_iva;
             $costo_puntos_sin_iva = $datosProducto->costo_puntos_sin_iva;
             $fee_brimagy = $datosProducto->fee_brimagy;
@@ -1054,6 +1056,7 @@ class ProductosController extends BaseController
             $total_envio = $datosProducto->total_envio;
             $total = $datosProducto->total;
             $puntos = $datosProducto->puntos;
+            $valor_factor = $datosProducto->valor_factor;
             $factor = $datosProducto->factor;
             $foto_producto = $datosProducto->foto_producto;
             $id_plataforma = $datosProducto->id_plataforma;
@@ -1076,7 +1079,7 @@ class ProductosController extends BaseController
                     'features' => $descripcion,
                     'required_score' => $puntos,
                     'sub_category_id' => $id_catalogo,
-                    'photo_name' => $foto_producto,
+                    'photo_name' => $foto_producto ?: '',
                     'sku' => $sku,
                     'TyC' => "",
                     'validity' => "",
@@ -1104,6 +1107,7 @@ class ProductosController extends BaseController
                 'total_envio' => $total_envio,
                 'total' => $total,
                 'puntos' => $puntos,
+                'valor_factor' => $valor_factor,
                 'factor' => $factor,
                 'foto_producto' => $foto_producto,
                 'id_producto_brimagy' => $producto_brimagy->id,
@@ -1254,6 +1258,7 @@ class ProductosController extends BaseController
                     'cpt.total_envio',
                     'cpt.total',
                     'cpt.puntos',
+                    'cpt.valor_factor',
                     'cpt.factor',
                     'cpt.foto_producto',
                     'cpt.id_producto_brimagy',
@@ -1368,6 +1373,7 @@ class ProductosController extends BaseController
                     'cpt.total_envio',
                     'cpt.total',
                     'cpt.puntos',
+                    'cpt.valor_factor',
                     'cpt.factor',
                     'cpt.tipo_producto',
                     'p.nombre as nombre_plataforma',
@@ -1510,6 +1516,7 @@ class ProductosController extends BaseController
                 'total_envio',
                 'total',
                 'puntos',
+                'valor_factor',
                 'factor',
                 'costo_con_iva',
                 'costo_sin_iva',
@@ -1530,12 +1537,9 @@ class ProductosController extends BaseController
                 'costo_con_iva',
                 'costo_puntos_con_iva',
                 'envio_extra',
+                'valor_factor',
                 'foto_producto',
             ]);
-
-            /*$datosParaActualizar = array_filter($datosParaActualizar, function ($value) {
-                return !is_null($value);
-            });*/
 
             $datosParaActualizar = array_filter($datosParaActualizar, function ($value, $campo) use ($producto) {
                 return (string) $producto->$campo !== (string) $value;
@@ -1560,80 +1564,77 @@ class ProductosController extends BaseController
             $plataforma = Plataformas::where('id', $producto->id_plataforma)->first();
             $nombre_plataforma = $plataforma->nombre;
 
-            if (!$variables) {
-                $fee_brimagy = 0;
-                switch ($nombre_plataforma) {
-                    case "club bohn":
-                        $fee_brimagy = 15;
-                        break;
-                    case "puntotes":
-                        $fee_brimagy = 12;
-                        break;
-                    default:
-                        break;
-                }
+            $fee_brimagy = 0;
+            $envio_base_g = 0;
+            $costo_caja_g = 0;
 
-                $costo_proveedor_con_iva = $request->has('costo_con_iva')
-                    ? ($request->costo_con_iva === '' || $request->costo_con_iva === null ? 0 : $request->costo_con_iva)
-                    : $producto->costo_con_iva;
-                $costo_proveedor_sin_iva = $costo_proveedor_con_iva > 0
-                    ? $costo_proveedor_con_iva / 1.16
-                    : 0;
-
-                $costo_puntos_con_iva = $request->has('costo_puntos_con_iva')
-                    ? ($request->costo_puntos_con_iva === '' || $request->costo_puntos_con_iva === null ? 0 : $request->costo_puntos_con_iva)
-                    : $producto->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = $costo_puntos_con_iva > 0
-                    ? $costo_puntos_con_iva / 1.16
-                    : 0;
-
-                $envio_base = 180;
-                $costo_caja = 19;
-
-                $envio_extra = $request->has('envio_extra')
-                    ? ($request->envio_extra === '' || $request->envio_extra === null ? 0 : $request->envio_extra)
-                    : $producto->envio_extra;
-
-                $porcentaje = (float) $fee_brimagy / 100;
-                $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
-                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio = round($envio_base + $costo_caja + $envio_extra);
-                $total = round($subtotal + $total_envio);
-                $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
-                $puntos = round($redondeo * 15); //factor en bd
-            } else {
-
-                $costo_proveedor_con_iva = $request->has('costo_con_iva')
-                    ? ($request->costo_con_iva === '' || $request->costo_con_iva === null ? 0 : $request->costo_con_iva)
-                    : $producto->costo_con_iva;
-                $costo_proveedor_sin_iva = $costo_proveedor_con_iva > 0
-                    ? $costo_proveedor_con_iva / 1.16
-                    : 0;
-
-                $costo_puntos_con_iva = $request->has('costo_puntos_con_iva')
-                    ? ($request->costo_puntos_con_iva === '' || $request->costo_puntos_con_iva === null ? 0 : $request->costo_puntos_con_iva)
-                    : $producto->costo_puntos_con_iva;
-                $costo_puntos_sin_iva = $costo_puntos_con_iva > 0
-                    ? $costo_puntos_con_iva / 1.16
-                    : 0;
-
-                $fee_brimagy = $variables->fee_brimagy;
-                $envio_base = $variables->envio_base;
-                $costo_caja = $variables->costo_caja;
-                $envio_extra = $variables->envio_extra;
-
-                $porcentaje = (float) $fee_brimagy / 100;
-                $valor_con_fee = round((float) $costo_puntos_sin_iva * $porcentaje);
-                $subtotal = round($costo_puntos_sin_iva + $valor_con_fee);
-                $total_envio = round($envio_base + $costo_caja + $envio_extra);
-                $total = round($subtotal + $total_envio);
-                $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; //puntos en bd
-                $puntos = round($redondeo * 15); //factor en bd
+            switch ($nombre_plataforma) {
+                case "club bohn":
+                    $fee_brimagy = 15;
+                    $envio_base_g = 180;
+                    $costo_caja_g = 19;
+                    break;
+                case "puntotes":
+                    $fee_brimagy = 12;
+                    $envio_base_g = 180;
+                    $costo_caja_g = 19;
+                    break;
+                default:
+                    break;
             }
+
+            $costo_proveedor_con_iva = $request->has('costo_con_iva')
+                ? ($request->costo_con_iva === '' || $request->costo_con_iva === null ? 0 : $request->costo_con_iva)
+                : $producto->costo_con_iva;
+            $costo_proveedor_sin_iva = $costo_proveedor_con_iva > 0
+                ? $costo_proveedor_con_iva / 1.16
+                : 0;
+
+            $costo_puntos_con_iva = $request->has('costo_puntos_con_iva')
+                ? ($request->costo_puntos_con_iva === '' || $request->costo_puntos_con_iva === null ? 0 : $request->costo_puntos_con_iva)
+                : $producto->costo_puntos_con_iva;
+            $costo_puntos_sin_iva = $costo_puntos_con_iva > 0
+                ? $costo_puntos_con_iva / 1.16
+                : 0;
+
+            $valorDelRequest = function (string $campo) use ($request, $producto) {
+                return $request->has($campo)
+                    ? ($request->$campo === '' || $request->$campo === null ? 0 : $request->$campo)
+                    : $producto->$campo;
+            };
+
+            $fee_brimagy = $variables ? $variables->fee_brimagy : $fee_brimagy;
+            $envio_base = $variables ? $variables->envio_base : $envio_base_g;
+            $costo_caja = $variables ? $variables->costo_caja : $costo_caja_g;
+
+            $envio_extra = $valorDelRequest('envio_extra');
+            $valor_factor = $valorDelRequest('valor_factor');
+
+            $porcentaje = (float) $fee_brimagy / 100;
+            $valor_con_fee = (float) $costo_puntos_sin_iva * $porcentaje;
+            $subtotal = $costo_puntos_sin_iva + $valor_con_fee;
+            $total_envio = $envio_base + $costo_caja + $envio_extra;
+            $total = $subtotal + $total_envio;
+            $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1; // puntos en bd
+            $puntos = $valor_factor == 0 ? round($total) : round($total * $valor_factor); // factor en bd
 
             //Subir la foto
             $nombreUnico = $producto->foto_producto;
             $archivo = $request->file('foto_producto');
+
+            if (
+                ($request->has('envio_extra') && $request->envio_extra !== '' && $request->envio_extra !== null)
+                ||
+                ($request->has('valor_factor') && $request->valor_factor !== '' && $request->valor_factor !== null)
+            ) {
+                $existeEditando = ProductoEditado::where('id_producto', $producto->id)->first();
+                if (!$existeEditando) {
+                    ProductoEditado::create([
+                        'id_producto' => $producto->id,
+                        'editado' => 1
+                    ]);
+                }
+            }
 
             switch ($nombre_plataforma) {
                 case "club bohn":
@@ -1777,6 +1778,7 @@ class ProductosController extends BaseController
             $datosParaActualizar['total_envio'] = $total_envio;
             $datosParaActualizar['total'] = $total;
             $datosParaActualizar['puntos'] = $redondeo;
+            $datosParaActualizar['valor_factor'] = $valor_factor;
             $datosParaActualizar['factor'] = $puntos;
             $datosParaActualizar['updated_at'] = now()->setTimezone('America/Mexico_City');
 
@@ -1816,7 +1818,7 @@ class ProductosController extends BaseController
             foreach ($camposAuditables as $campo) {
                 $anterior = $valoresAnteriores[$campo] ?? null;
                 $nuevo = $datosParaActualizar[$campo] ?? null;
-                if ($nuevo !== null && (string) $anterior !== (string) $nuevo) {
+                if ($nuevo !== null && round((float) $anterior, 2) !== round((float) $nuevo, 2)) {
                     $cambios[] = "{$campo}: {$anterior} → {$nuevo}";
                 }
             }
@@ -2028,6 +2030,7 @@ class ProductosController extends BaseController
                     'cpt.total_envio',
                     'cpt.total',
                     'cpt.puntos',
+                    'cpt.valor_factor',
                     'cpt.factor',
                     'cpt.tipo_producto',
                     'p.nombre as nombre_plataforma',
@@ -2137,6 +2140,29 @@ class ProductosController extends BaseController
                     'av.desc as nombre_producto',
                     'av.sku',
                     'av.category as catalogo',
+                    'av.features as descripcion',
+                    'av.required_score',
+                    'av.created_at as fecha_creacion',
+                )
+                ->where('av.status', 'ACTIVE');
+
+            $productos = $query->orderBy('av.created_at', 'desc')->get();
+
+            return $this->sendResponse($productos);
+            //return $this->sendResponse($prueba);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener los productos', $th, 500);
+        }
+    }
+    public function getCatalogoProductosPuntotesAwards(Request $request)
+    { //funcion para obtener productos de la base de brimagy
+        try {
+            $query = DB::connection('mysql_brimagy')->table('awards as av')
+                ->select(
+                    'av.id',
+                    'av.desc as nombre_producto',
+                    'av.sku',
+                    'av.sub_category_id as catalogo',
                     'av.required_score',
                     'av.created_at as fecha_creacion',
                 )

@@ -5,17 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class VariablesGlobales extends Model
+class ProductoEditado extends Model
 {
     use HasFactory;
-    protected $table = 'dc_variables_globales';
+    protected $table = 'dc_producto_editado';
     protected $fillable = [
-        'fee_brimagy',
-        'envio_base',
-        'costo_caja',
-        'envio_extra',
-        'factor',
-        'id_plataforma',
+        'id_producto',
+        'editado'
     ];
 
     protected $casts = [
