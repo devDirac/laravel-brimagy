@@ -14,6 +14,7 @@ use App\Http\Controllers\API\NotificacionesController;
 use App\Http\Controllers\API\OrdenCompraController;
 use App\Http\Controllers\API\ProductosController;
 use App\Http\Controllers\API\ProveedorController;
+use App\Http\Controllers\API\ReportesExcel;
 use App\Http\Controllers\API\UserController;
 
 $SANCTUM = 'auth:sanctum';
@@ -171,6 +172,11 @@ Route::get('getProductosSincronizados', [ConfiguracionesController::class, 'getP
 Route::get('getVariablesGlobalesPorPlataforma', [ConfiguracionesController::class, 'getVariablesGlobalesPorPlataforma'])->middleware($SANCTUM);
 Route::put('sincronizarVariablesEnProductos', [ConfiguracionesController::class, 'sincronizarVariablesEnProductos'])->middleware($SANCTUM);
 
+//PERIODOS
+Route::post('crearPeriodo', [ConfiguracionesController::class, 'crearPeriodo'])->middleware($SANCTUM);
+Route::put('editarPeriodo', [ConfiguracionesController::class, 'editarPeriodo'])->middleware($SANCTUM);
+Route::get('getPeriodos', [ConfiguracionesController::class, 'getPeriodos'])->middleware($SANCTUM);
+
 //QUERYS DE LA BASE DE DATOS DE BRIMAGY
 Route::get('getCatalogoProductosDigitalesBrimagy', [ProductosController::class, 'getCatalogoProductosDigitalesBrimagy'])->middleware($SANCTUM);
 Route::get('getCatalogoClubBohnBrimagy', [ProductosController::class, 'getCatalogoClubBohnBrimagy'])->middleware($SANCTUM);
@@ -188,3 +194,6 @@ Route::post('crearUsuarioPlataforma', [UserController::class, 'crearUsuarioPlata
 Route::get('getCheckEmailUsuarioPlataforma', [UserController::class, 'getCheckEmailUsuarioPlataforma'])->middleware($SANCTUM);
 Route::get('getUsuariosPlataforma', [UserController::class, 'getUsuariosPlataforma'])->middleware($SANCTUM);
 Route::get('getTipoUsuarios', [UserController::class, 'getTipoUsuarios'])->middleware($SANCTUM);
+
+//REPORTES EXCEL
+Route::get('exportarExcel', [ReportesExcel::class, 'exportarExcel'])->middleware($SANCTUM);

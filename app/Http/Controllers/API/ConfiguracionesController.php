@@ -8,6 +8,7 @@ use App\Http\Controllers\API\BaseController as BaseController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
+use App\Models\Periodo;
 use App\Models\Plataformas;
 use App\Models\VariablesGlobales;
 
@@ -83,6 +84,130 @@ class ConfiguracionesController extends BaseController
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al registrar las variables globales', $th->getMessage(), 500);
+        }
+    }
+
+    public function crearPeriodo(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'plataforma' => 'required|string',
+                'fecha_inicio_periodo' => 'required|string',
+                'fecha_fin_periodo' => 'required|string'
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $user = Auth::user();
+
+            // Desactivar los periodos existentes de esa plataforma
+            Periodo::where('id_plataforma', $id_plataforma)
+                ->update(['activo' => 2]);
+
+            $periodo = Periodo::create([
+                'id_plataforma' => $id_plataforma,
+                'id_usuario_creador' => $user->id,
+                'fecha_inicio' => $request->fecha_inicio_periodo,
+                'fecha_fin' => $request->fecha_fin_periodo,
+                'activo' => 1
+            ]);
+
+            $log['evento'] = 'Creación de periodo';
+            $log['descripcion'] = "El usuario con id: {$user->id} añadio un perioro del {$request->fecha_inicio_periodo} al {$request->fecha_fin_periodo}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($periodo, 'Periodo registrado exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al registrar el periodo', $th->getMessage(), 500);
+        }
+    }
+
+    public function editarPeriodo(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_periodo' => 'required|integer',
+                'fecha_inicio_periodo' => 'required|string',
+                'fecha_fin_periodo' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $periodoExistente = Periodo::where('id', $request->id_periodo)->first();
+
+            if (!$periodoExistente) {
+                DB::rollBack();
+                return $this->sendError('No existe el periodo', 'error', 404);
+            }
+
+            $periodoExistente->update([
+                'fecha_inicio' => $request->fecha_inicio_periodo,
+                'fecha_fin' => $request->fecha_fin_periodo,
+                'updated_at' => now()->setTimezone('America/Mexico_City'),
+            ]);
+
+            $user = Auth::user();
+            $log['evento'] = 'Actualización de periodo';
+            $log['descripcion'] = "El usuario con id: {$user->id} actualizó el periodo {$request->id_periodo} del {$request->fecha_inicio_periodo} al {$request->fecha_fin_periodo}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($periodoExistente, 'Periodo actualizado correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al editar el periodo', $th->getMessage(), 500);
+        }
+    }
+
+    public function getPeriodos(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'plataforma' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $periodos = Periodo::where('id_plataforma', $id_plataforma)->get();
+
+            return $this->sendResponse($periodos);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener el periodo actual', $th, 500);
         }
     }
 

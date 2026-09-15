@@ -128,6 +128,7 @@ class AlmacenController extends BaseController
                     'ra.cantidad_almacen',
                     'ra.fecha_compra',
                     'ra.costo_envio_real',
+                    'ra.folio_factura',
                     'ra.comentarios',
                     'ra.estatus',
                     'ra.guia',
@@ -173,6 +174,7 @@ class AlmacenController extends BaseController
                 'guia' => $base->guia,
                 'imei' => $base->imei,
                 'no_serie' => $base->no_serie,
+                'folio_factura' => $base->folio_factura,
                 'comentarios' => $base->comentarios,
                 // Total sumado de todos los registros
                 'cantidad_almacen' => $productos->sum('cantidad_almacen'),
@@ -193,6 +195,7 @@ class AlmacenController extends BaseController
                         'costo_envio_real' => $base->costo_envio_real,
                         'fecha_pago' => $base->fecha_pago,
                         'no_serie' => $p->no_serie,
+                        'folio_factura' => $p->folio_factura,
                         'comentarios' => $p->comentarios,
                     ])->values()
             ];
@@ -256,6 +259,7 @@ class AlmacenController extends BaseController
                     'cantidad_almacen' => $request->cantidad_producto,
                     'imei' => $request->imei,
                     'no_serie' => $request->no_serie,
+                    'folio_factura' => $request->folio_factura,
                     'comentarios' => $request->comentarios,
                     'precio_compra' => $producto_almacen->costo_con_iva,
                     'fecha_compra' => $request->fecha_compra,
@@ -292,6 +296,7 @@ class AlmacenController extends BaseController
                     'cantidad_almacen' => $request->cantidad_producto,
                     'imei' => $request->imei,
                     'no_serie' => $request->no_serie,
+                    'folio_factura' => $request->folio_factura,
                     'comentarios' => $request->comentarios,
                 ]);
 
@@ -466,7 +471,6 @@ class AlmacenController extends BaseController
             $validator = Validator::make($request->all(), [
                 'id_canje' => 'required|integer',
                 'guia_producto' => 'required|string',
-                'costo_envio_real' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -484,7 +488,6 @@ class AlmacenController extends BaseController
             RecepcionAlmacen::where('id_canje', $request->id_canje)
                 ->update([
                     'guia' => $request->guia_producto,
-                    'costo_envio_real' => $request->costo_envio_real,
                     'estatus' => 'guia_asignada',
                 ]);
 
@@ -492,11 +495,6 @@ class AlmacenController extends BaseController
             BitacoraEventos::create([
                 'evento' => 'Se añadió una guía a un producto en almacen',
                 'descripcion' => "El usuario con id: {$user->id} añadió la guía {$request->guia_producto} al canje {$request->id_canje} en almacén",
-                'id_usuario' => $user->id,
-            ]);
-            BitacoraEventos::create([
-                'evento' => 'Se añadió el costo de envio real',
-                'descripcion' => "El usuario con id: {$user->id} añadió el costo de envío real: {$request->costo_envio_real} al canje {$request->id_canje} en almacén",
                 'id_usuario' => $user->id,
             ]);
 
@@ -552,6 +550,7 @@ class AlmacenController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'id_producto_almacen' => 'required|integer',
+                'costo_envio_real' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -568,7 +567,7 @@ class AlmacenController extends BaseController
 
             // Actualizar todos los registros
             RecepcionAlmacen::where('id_orden_compra', $producto_almacen->id_orden_compra)
-                ->update(['estatus' => "entregado"]);
+                ->update(['estatus' => "entregado", 'costo_envio_real' => $request->costo_envio_real]);
 
             $user = Auth::user();
             $log = [
@@ -577,6 +576,12 @@ class AlmacenController extends BaseController
                 'id_usuario' => $user->id,
             ];
             BitacoraEventos::create($log);
+
+            BitacoraEventos::create([
+                'evento' => 'Se añadió el costo de envio real',
+                'descripcion' => "El usuario con id: {$user->id} añadió el costo de envío real: {$request->costo_envio_real} al canje {$request->id_canje} en almacén",
+                'id_usuario' => $user->id,
+            ]);
 
             DB::commit();
             return $this->sendResponse('Confirmada recepción del producto correctamente.');

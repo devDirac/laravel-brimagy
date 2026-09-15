@@ -13,11 +13,15 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoProveedores;
+use App\Models\CategoriaBrimagy;
+use App\Models\CategoriaClub;
 use App\Models\Facturas;
 use App\Models\Notificaciones;
 use App\Models\OrdenCompra;
 use App\Models\Plataformas;
 use App\Models\RecepcionAlmacen;
+use App\Models\SubCategoriaBrimagy;
+use App\Models\SubCategoriaClub;
 use App\Models\UsuariosPlataforma;
 use App\Models\ValidacionCanje;
 use App\Services\WhatsAppService;
@@ -194,8 +198,6 @@ class OrdenCompraController extends BaseController
                     'cp.telefono',
                     'up.id as id_usuario',
                     'up.name as nombre_vendedor',
-                    /*'up.first_last_name as primer_apellido',
-                    'up.second_last_name as segundo_apellido',*/
                     'cp.correo'
                 )
                 ->leftJoin('dc_catalogo_proveedores as cp', 'oc.id_proveedor', '=', 'cp.id')
@@ -229,11 +231,16 @@ class OrdenCompraController extends BaseController
                     'vc.cantidad_producto as number_of_awards',
                     'cdp.nombre_producto as nombre_premio',
                     'cdp.marca',
+                    'cdp.color',
+                    'cdp.talla',
                     'cdp.fee_brimagy',
                     'cdp.costo_sin_iva',
                     'cdp.costo_con_iva',
+                    'cdp.id_catalogo',
+                    'p.nombre as nombre_plataforma',
                 )
                 ->leftJoin('dc_validacion_canje as vc', 'cdp.id', '=', 'vc.id_producto')
+                ->leftJoin('dc_plataformas as p', 'cdp.id_plataforma', '=', 'p.id')
                 ->whereIn('cdp.id', $productosIds)
                 ->get()
                 ->keyBy('id');
@@ -254,6 +261,48 @@ class OrdenCompraController extends BaseController
             }
 
             $productosCombinados = collect($productosCombinados);
+
+            // Resolver nombre de categoría según plataforma, agrupando para evitar N+1
+            $idsCatalogoPorPlataforma = $productosCombinados
+                ->groupBy('nombre_plataforma')
+                ->map(fn($grupo) => collect($grupo)->pluck('id_catalogo')->filter()->unique()->values());
+
+            $categoriasPorClave = collect();
+
+            foreach ($idsCatalogoPorPlataforma as $nombrePlataforma => $idsCatalogo) {
+                if ($idsCatalogo->isEmpty()) {
+                    continue;
+                }
+
+                switch (strtolower((string) $nombrePlataforma)) {
+                    case 'club bohn':
+                        $subCategoriaModel = SubCategoriaClub::class;
+                        $categoriaModel = CategoriaClub::class;
+                        break;
+                    case 'puntotes':
+                        $subCategoriaModel = SubCategoriaBrimagy::class;
+                        $categoriaModel = CategoriaBrimagy::class;
+                        break;
+                    default:
+                        continue 2;
+                }
+
+                $subCategorias = $subCategoriaModel::whereIn('id', $idsCatalogo)->get()->keyBy('id');
+                $idsCategoria = $subCategorias->pluck('category_id')->filter()->unique()->values();
+                $categorias = $categoriaModel::whereIn('id', $idsCategoria)->pluck('desc', 'id');
+
+                foreach ($idsCatalogo as $idCatalogo) {
+                    $subCategoria = $subCategorias->get($idCatalogo);
+                    $nombreCategoria = $subCategoria ? ($categorias[$subCategoria->category_id] ?? null) : null;
+                    $categoriasPorClave->put($nombrePlataforma . ':' . $idCatalogo, $nombreCategoria);
+                }
+            }
+
+            $productosCombinados = $productosCombinados->map(function ($producto) use ($categoriasPorClave) {
+                $producto = (object) $producto;
+                $producto->categoria = $categoriasPorClave->get($producto->nombre_plataforma . ':' . $producto->id_catalogo);
+                return $producto;
+            });
 
             // Preparar respuesta
             $respuesta = [

@@ -109,11 +109,7 @@ class ProductosController extends BaseController
                 $id_catalogo = $catalogo->id;
             }
 
-            if ($plataforma->nombre === "club bohn") {
-                $productoExistente = CatalogoProductos::where('id_producto_brimagy', $request->id_producto_brimagy)->where('id_plataforma', 1)->first();
-            } else {
-                $productoExistente = CatalogoProductos::where('id_producto_brimagy', $request->id_producto_brimagy)->where('id_plataforma', 2)->first();
-            }
+            $productoExistente = CatalogoProductos::where('id_producto_brimagy', $request->id_producto_brimagy)->first();
 
             $variables = VariablesGlobales::where('id_plataforma', $id_plataforma)->first();
 
@@ -310,14 +306,14 @@ class ProductosController extends BaseController
                 }
 
                 $producto_brimagy->update([
-                    'desc' => $request->nombre_producto,
-                    'features' => $request->descripcion,
-                    'required_score' => $puntos,
-                    'sub_category_id' => $request->id_catalogo,
-                    'photo_name' => $nombreUnico,
-                    'sku' => $request->sku,
-                    'TyC' => $request->tyc,
-                    'validity' => $request->vigencia,
+                    'desc' => $request->nombre_producto ?? $producto_brimagy->desc,
+                    'features' => $request->descripcion ?? $producto_brimagy->features,
+                    'required_score' => $puntos ?? $producto_brimagy->required_score,
+                    'sub_category_id' => $request->id_catalogo ?? $producto_brimagy->sub_category_id,
+                    'photo_name' => $nombreUnico ?? $producto_brimagy->photo_name,
+                    'sku' => $request->sku ?? $producto_brimagy->sku,
+                    'TyC' => $request->tyc ?? $producto_brimagy->TyC,
+                    'validity' => $request->vigencia ?? $producto_brimagy->validity,
                 ]);
 
                 if ($request->tipo_registro === 'individual' && $archivo) {
@@ -337,6 +333,63 @@ class ProductosController extends BaseController
                 $descripcionCambios = !empty($cambios)
                     ? implode(' | ', $cambios)
                     : "Sin cambios en valores numéricos";
+
+                if ($request->filled('color')) {
+
+                    switch ($nombre_plataforma) {
+                        case "club bohn":
+                            $color_brimagy = ColoresClub::create([
+                                'award_id' => $producto_brimagy->id,
+                                'color' => $request->color,
+                                'status' => "ACTIVE",
+                            ]);
+                            break;
+                        case "puntotes":
+                            $color_brimagy = ColoresBrimagy::create([
+                                'award_id' => $producto_brimagy->id,
+                                'color' => $request->color,
+                                'status' => "ACTIVE",
+                            ]);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    Colores::create([
+                        'id_producto' => $productoExistente->id,
+                        'id_color_brimagy' => $color_brimagy->id,
+                        'color' => $request->color,
+                        'status' => "ACTIVE",
+                    ]);
+                }
+                if ($request->filled('talla')) {
+
+                    switch ($nombre_plataforma) {
+                        case "club bohn":
+                            $talla_brimagy = TallasClub::create([
+                                'award_id' => $producto_brimagy->id,
+                                'size' => $request->talla,
+                                'status' => "ACTIVE",
+                            ]);
+                            break;
+                        case "puntotes":
+                            $talla_brimagy = TallasBrimagy::create([
+                                'award_id' => $producto_brimagy->id,
+                                'size' => $request->talla,
+                                'status' => "ACTIVE",
+                            ]);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    Tallas::create([
+                        'id_producto' => $productoExistente->id,
+                        'id_talla_brimagy' => $talla_brimagy->id,
+                        'talla' => $request->talla,
+                        'status' => "ACTIVE",
+                    ]);
+                }
 
                 BitacoraEventos::create([
                     'evento' => 'Edición de producto',
@@ -1328,6 +1381,23 @@ class ProductosController extends BaseController
             }
 
             $productos = $query->orderBy('cpt.created_at', 'desc')->get();
+
+            $idsBrimagy = $productos->pluck('id_producto_brimagy')->filter()->unique()->values();
+
+            if ($idsBrimagy->isNotEmpty()) {
+                $modeloExterno = $esClubBohn ? ProductoClub::class : ProductoBrimagy::class;
+
+                $extras = $modeloExterno::whereIn('id', $idsBrimagy)
+                    ->get(['id', 'TyC', 'validity'])
+                    ->keyBy('id');
+
+                $productos = $productos->map(function ($producto) use ($extras) {
+                    $extra = $extras->get($producto->id_producto_brimagy);
+                    $producto->tyc = $extra->TyC ?? null;
+                    $producto->vigencia = $extra->validity ?? null;
+                    return $producto;
+                });
+            }
 
             if ($esClubBohn) {
                 $idsCatalogo = $productos->pluck('id_catalogo')->filter()->unique()->values();

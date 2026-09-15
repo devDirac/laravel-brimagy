@@ -9,7 +9,7 @@ class ProductoBrimagy extends Model
 {
     use HasFactory;
     protected $connection = 'mysql_brimagy';
-    protected $table = 'dc_awards';
+    protected $table = 'awards';
     protected $fillable = [
         'desc',
         'required_score',
