@@ -1689,6 +1689,7 @@ class ProductosController extends BaseController
             $puntos = $valor_factor == 0 ? round($total) : round($total * $valor_factor); // factor en bd
 
             //Subir la foto
+            $fotoModificada = false;
             $nombreUnico = $producto->foto_producto;
             $archivo = $request->file('foto_producto');
 
@@ -1730,6 +1731,7 @@ class ProductosController extends BaseController
             }
 
             if ($archivo) {
+
                 $nombreOriginal = $archivo->getClientOriginalName();
                 $extension = $archivo->getClientOriginalExtension();
                 $nombreSinExtension = pathinfo($nombreOriginal, PATHINFO_FILENAME);
@@ -1787,6 +1789,7 @@ class ProductosController extends BaseController
                 }
 
                 $datosParaActualizar['foto_producto'] = $nombreUnico;
+                $fotoModificada = true;
             } elseif (
                 $categoria_anterior &&
                 $categoria_nueva &&
@@ -1803,6 +1806,7 @@ class ProductosController extends BaseController
                 }
 
                 $datosParaActualizar['foto_producto'] = $nombreUnico;
+                $fotoModificada = true;
 
                 $fotosAdicionales = FotosProducto::where('id_producto', $request->id_producto)->get();
 
@@ -1874,12 +1878,16 @@ class ProductosController extends BaseController
                 'desc' => $request->nombre_producto,
                 'required_score' => $puntos,
                 'sub_category_id' => $request->id_catalogo,
-                'photo_name' => $nombreUnico ?: $producto_brimagy->photo_name,
+                //'photo_name' => $nombreUnico ?: $producto_brimagy->photo_name,
                 'sku' => $request->sku,
                 'features' => $request->descripcion,
                 'TyC' => $request->tyc,
                 'validity' => $request->vigencia,
             ];
+
+            if ($fotoModificada) {
+                $datosBrimagy['photo_name'] = $nombreUnico;
+            }
 
             $producto_brimagy->update($datosBrimagy);
 
