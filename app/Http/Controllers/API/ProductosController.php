@@ -172,6 +172,7 @@ class ProductosController extends BaseController
             }
 
             //Subir la foto
+            $fotoModificada = false;
             $nombreUnico = "";
             $archivo = $request->file('foto_producto');
 
@@ -193,11 +194,14 @@ class ProductosController extends BaseController
                 $extension = $archivo->getClientOriginalExtension();
                 $nombreSinExtension = pathinfo($nombreOriginal, PATHINFO_FILENAME);
                 $nombreUnico = $nombreSinExtension . now()->format('Y-m-d_H_i_s') . '.' . $extension;
+                $fotoModificada = true;
             }
 
             if ($productoExistente) {
 
-                $nombreUnico = $productoExistente->foto_producto;
+                if (!$fotoModificada) {
+                    $nombreUnico = $productoExistente->foto_producto;
+                }
 
                 $valoresAnteriores = [
                     'fee_brimagy' => $productoExistente->fee_brimagy,
@@ -305,7 +309,7 @@ class ProductosController extends BaseController
                     return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
                 }
 
-                $producto_brimagy->update([
+                /*$producto_brimagy->update([
                     'desc' => $request->nombre_producto ?? $producto_brimagy->desc,
                     'features' => $request->descripcion ?? $producto_brimagy->features,
                     'required_score' => $puntos ?? $producto_brimagy->required_score,
@@ -314,7 +318,22 @@ class ProductosController extends BaseController
                     'sku' => $request->sku ?? $producto_brimagy->sku,
                     'TyC' => $request->tyc ?? $producto_brimagy->TyC,
                     'validity' => $request->vigencia ?? $producto_brimagy->validity,
-                ]);
+                ]);*/
+                $datosBrimagy = [
+                    'desc' => $request->nombre_producto ?? $producto_brimagy->desc,
+                    'features' => $request->descripcion ?? $producto_brimagy->features,
+                    'required_score' => $puntos ?? $producto_brimagy->required_score,
+                    'sub_category_id' => $request->id_catalogo ?? $producto_brimagy->sub_category_id,
+                    'sku' => $request->sku ?? $producto_brimagy->sku,
+                    'TyC' => $request->tyc ?? $producto_brimagy->TyC,
+                    'validity' => $request->vigencia ?? $producto_brimagy->validity,
+                ];
+
+                if ($fotoModificada) {
+                    $datosBrimagy['photo_name'] = $nombreUnico;
+                }
+
+                $producto_brimagy->update($datosBrimagy);
 
                 if ($request->tipo_registro === 'individual' && $archivo) {
                     $ruta = $archivo->storeAs(
