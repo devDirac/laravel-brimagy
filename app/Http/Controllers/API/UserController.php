@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoTipoUsuarios;
 use App\Models\UserClub;
+use App\Models\UserLocal;
 use App\Models\UsuariosPlataforma;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -239,10 +240,17 @@ class UserController extends BaseController
             } else {
                 $usuarioActualizado = User::where('id', $request->id_usuario)
                     ->update($dataToUpdate);
-                //actualizar de la base de datos de brimagy
+                //actualizar en puntotes
                 $usuarioBrimagy = UserBrimagy::where('id', $request->id_usuario)
                     ->update($dataToUpdate);
                 if (!$usuarioBrimagy) {
+                    DB::rollBack();
+                    return $this->sendError('Este usuario no existe en la base Brimagy', [], 404);
+                }
+                //actualizar en puntotes local
+                $usuarioLocal = UserLocal::where('id', $request->id_usuario)
+                    ->update($dataToUpdate);
+                if (!$usuarioLocal) {
                     DB::rollBack();
                     return $this->sendError('Este usuario no existe en la base Brimagy', [], 404);
                 }
@@ -286,15 +294,23 @@ class UserController extends BaseController
 
             if ($request->plataforma === "club_bohn") {
             } else {
-                //se activa en brimagy si no es club bohn
+                //se activa en puntotes
                 $userBrimagy = UserBrimagy::find($request->id);
-
                 if (!$userBrimagy) {
                     return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
                 }
+                //se activa en puntotes local
+                $userLocal = UserLocal::find($request->id);
+                if (!$userLocal) {
+                    return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
+                }
 
+                //actualizar en puntotes
                 $userBrimagy->status = 'ACTIVE';
                 $userBrimagy->save();
+                //actualizar en puntotes local
+                $userLocal->status = 'ACTIVE';
+                $userLocal->save();
             }
 
             $userLog = Auth::user();
@@ -334,15 +350,23 @@ class UserController extends BaseController
 
             if ($request->plataforma === "club_bohn") {
             } else {
-                //se activa en brimagy si no es club bohn
+                //se activa en puntotes
                 $userBrimagy = UserBrimagy::find($request->id);
-
                 if (!$userBrimagy) {
                     return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
                 }
+                //se activa en puntotes local
+                $userLocal = UserLocal::find($request->id);
+                if (!$userLocal) {
+                    return $this->sendError('Este usuario no existe en Brimagy', 'error', 404);
+                }
 
+                //se actualiza en puntotes
                 $userBrimagy->status = 'DEACTIVATE';
                 $userBrimagy->save();
+                //se actualiza en puntotes local
+                $userLocal->status = 'DEACTIVATE';
+                $userLocal->save();
             }
 
             $userLog = Auth::user();

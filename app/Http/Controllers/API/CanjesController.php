@@ -15,7 +15,6 @@ use App\Models\BitacoraEventos;
 use App\Models\ValidacionCanje;
 use App\Mail\ValidacionCanjeEnviada;
 use App\Models\Plataformas;
-use App\Models\User;
 use App\Models\UsuariosPlataforma;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
@@ -87,15 +86,19 @@ class CanjesController extends BaseController
             }
             $id_plataforma = $plataformaModel->id;
 
+            $canjeValidado = ValidacionCanje::where('id_canje', $request->id)->first();
+
             $user = Auth::user();
-            $validacion = ValidacionCanje::create([
-                'id_canje' => $request->id,
-                'id_producto' => $request->id_producto,
-                'cantidad_producto' => $request->number_of_awards,
-                'id_proveedor' => $request->id_proveedor,
-                'id_usuario_admin' => $user->id,
-                'id_plataforma' => $id_plataforma
-            ]);
+            if (!$canjeValidado) {
+                $validacion = ValidacionCanje::create([
+                    'id_canje' => $request->id,
+                    'id_producto' => $request->id_producto,
+                    'cantidad_producto' => $request->number_of_awards,
+                    'id_proveedor' => $request->id_proveedor,
+                    'id_usuario_admin' => $user->id,
+                    'id_plataforma' => $id_plataforma
+                ]);
+            }
 
             if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
                 $canje = DB::connection('mysql_club_bohn')
@@ -109,8 +112,8 @@ class CanjesController extends BaseController
             }
 
             if ($canje) {
-                $this->enviarWhatsApp($canje, null, null, null, $plataforma);
-                $this->enviarCorreo($canje, null, null, null);
+                $this->enviarWhatsApp($canje, null, null, null, $id_plataforma);
+                $this->enviarCorreo($canje, null, null, null, $id_plataforma);
             }
 
             $log['evento'] = 'Creación de validación de cliente';
@@ -120,7 +123,7 @@ class CanjesController extends BaseController
 
             DB::commit();
 
-            return $this->sendResponse($validacion, 'Validación enviada exitosamente.');
+            return $this->sendResponse('Validación enviada exitosamente.');
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al enviar la validación', $th->getMessage(), 500);
@@ -145,115 +148,7 @@ class CanjesController extends BaseController
 
         return $id;
     }
-    private function enviarWhatsApp($canje, $codigo = null, $validado = null, $proveedor = null, $plataforma = null)
-    {
-        try {
-            //conseguir los telefonos de todos los administradores
-            $telefonosAdmins = UsuariosPlataforma::where('tipo_usuario', 7)
-                ->whereNotNull('telefono')
-                ->where('telefono', '!=', '')
-                ->pluck('telefono')
-                ->toArray();
-
-            $canjeIdEncriptado = $this->encriptarCorto($canje->id);
-            $plataformaEncriptada = $this->encriptarCorto($plataforma);
-
-            //$plataformaDesencriptada = $this->desencriptarCorto($plataforma);
-
-            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$plataformaEncriptada}";
-
-            if ($codigo) {
-                $titulo = "🔐 Código de verificación de identidad 🔐";
-                $mensaje = "Ha solicitado un código para verificar su identidad, ingresa a la web y coloca el siguiente código para verificarte:\n\n" .
-                    "🔐 Código: *{$codigo}*\n\n" .
-                    "🔗 Link hacia la web:\n{$urlva}\n\n";
-
-                $this->whatsappService->sendMessage($canje->phone, $titulo);
-                $this->whatsappService->sendMessage($canje->phone, $mensaje);
-            } else if ($validado) {
-                $titulo = "✅ Identidad validada correctamente ✅";
-                $mensaje = "Se ha validado la identidad de un canje por parte de un cliente, los datos validados corresponden a:\n\n" .
-                    "👤 Cliente: {$canje->name}\n" .
-                    "📧 Correo: {$canje->email}\n" .
-                    "📱 Teléfono: {$canje->phone}\n" .
-                    "🎁 Premio: {$canje->desc}\n" .
-                    "📄 Folio: {$canje->folio}\n" .
-                    "💻 Plataforma: {$plataforma}\n";
-
-                foreach ($telefonosAdmins as $telefono) {
-                    $this->whatsappService->sendMessage($telefono, $titulo);
-                    $this->whatsappService->sendMessage($telefono, $mensaje);
-                }
-            } else {
-                $titulo = "🔔 Nueva solicitud de validación de identidad 🔔";
-                $mensaje = "📋 *Detalles del canje:*\n\n" .
-                    "👤 Cliente: {$canje->name}\n" .
-                    "📧 Correo: {$canje->email}\n" .
-                    "📱 Teléfono: {$canje->phone}\n" .
-                    "🎁 Premio: {$canje->desc}\n" .
-                    "📄 Folio: {$canje->folio}\n" .
-                    "🔗 Link para validación:\n{$urlva}\n\n" .
-                    "💻 Plataforma: {$plataforma}\n" .
-                    "✅ Por favor, proceder con la validación de identidad.";
-
-                $this->whatsappService->sendMessage($canje->phone, $titulo);
-                $this->whatsappService->sendMessage($canje->phone, $mensaje);
-            }
-
-            return $this->sendResponse('Validación enviada exitosamente.');
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al enviar la validación', $th->getMessage(), 500);
-        }
-    }
-
-    private function enviarCorreo($canje, $codigo = null, $validado = null, $proveedor = null, $plataforma = null)
-    {
-        try {
-            $destinatarios = [
-                'carrera.jorge@dirac.mx'
-            ];
-            //conseguir los correos de todos los administradores
-            $correosAdmins = User::where('tipo_usuario', 6)
-                ->whereNotNull('email')
-                ->where('email', '!=', '')
-                ->pluck('email')
-                ->toArray();
-
-            $canjeData = (object) [
-                'folio' => $canje->folio,
-                'nombre_usuario' => $canje->name,
-                'email' => $canje->email,
-                'phone' => $canje->phone,
-                'nombre_premio' => $canje->desc,
-                'puntos_canjeados' => $canje->points_swap,
-                'calle' => $canje->street,
-                'numero_calle' => $canje->number,
-                'colonia' => $canje->colony,
-                'municipio' => $canje->municipality,
-                'codigo_postal' => $canje->postal_code,
-            ];
-
-            $canjeIdEncriptado = $this->encriptarCorto($canje->id);
-            $plataformaEncriptada = $this->encriptarCorto($plataforma);
-            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$plataformaEncriptada}";
-
-            if ($codigo) {
-                Mail::to($canjeData->email)->send(new SolicitarCodigo($canjeData, $codigo, $urlva));
-            } else if ($validado) {
-                foreach ($correosAdmins as $correo) {
-                    Mail::to($correo)->send(new IdentidadValidada($canjeData, $codigo, $urlva));
-                }
-            } else {
-                Mail::to($canjeData->email)->send(new ValidacionCanjeEnviada($canjeData, $codigo, $urlva));
-            }
-
-            Log::info("Correo enviado correctamente");
-        } catch (\Exception $e) {
-            Log::error("Error al enviar correo: " . $e->getMessage());
-        }
-    }
-
-    /*public function getCanjes(Request $request)
+    public function getCanjes(Request $request)
     {
         try {
 
@@ -333,130 +228,6 @@ class CanjesController extends BaseController
             }
 
             $canjes = $query->orderBy('sp.created_at', 'desc')->get();
-
-            return $this->sendResponse($canjes);
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los canjes', $th, 500);
-        }
-    }*/
-    public function getCanjes(Request $request)
-    {
-        try {
-            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
-                return $this->getCanjesClubBohn($request);
-            }
-
-            // puntotes desde mysql_brimagy
-            $query = DB::connection('mysql_brimagy')
-                ->table('swaps_view as sp')
-                ->select(
-                    'sp.id',
-                    'sp.folio',
-                    'sp.name as nombre_usuario',
-                    'sp.email',
-                    'sp.phone',
-                    'sp.number_of_awards',
-                    'sp.size',
-                    'sp.color',
-                    'sp.category',
-                    'sp.points_swap as puntos_canjeados',
-                    'sp.desc as nombre_premio',
-                    'sp.required_score as costo_premio',
-                    'sp.sku',
-                    'sp.street as calle',
-                    'sp.number as numero_calle',
-                    'sp.colony as colonia',
-                    'sp.postal_code as codigo_postal',
-                    'sp.municipality as municipio',
-                    'sp.inside as numero_interior',
-                    'sp.between_1',
-                    'sp.between_2',
-                    'sp.additional_reference as referencia_adicional',
-                    'sp.created_at as creacion_canje',
-                    'sp.status as estado_canje',
-                    'sp.award_id'
-                );
-
-            // BÚSQUEDA 
-            if ($request->has('search') && !empty($request->search)) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.points_swap', 'LIKE', "%{$search}%");
-                });
-            }
-
-            // BÚSQUEDA POR FECHAS
-            if (
-                $request->has('fecha1') && !empty($request->fecha1) &&
-                $request->has('fecha2') && !empty($request->fecha2)
-            ) {
-                $fecha1 = Carbon::parse($request->fecha1);
-                $fecha2 = Carbon::parse($request->fecha2);
-
-                if ($fecha1->lt($fecha2)) {
-                    $inicio = $fecha1->copy()->startOfDay();
-                    $fin = $fecha2->copy()->endOfDay();
-                } else {
-                    $inicio = $fecha2->copy()->startOfDay();
-                    $fin = $fecha1->copy()->endOfDay();
-                }
-
-                $query->whereBetween('sp.created_at', [$inicio, $fin]);
-            }
-
-            $swaps = $query->orderBy('sp.created_at', 'desc')->get();
-
-            if ($swaps->isEmpty()) {
-                return $this->sendResponse(collect());
-            }
-
-            $plataformaModel = Plataformas::where('nombre', 'puntotes')->first();
-            if (!$plataformaModel) {
-                return $this->sendError('La plataforma "puntotes" no existe', 'error', 404);
-            }
-
-            $awardIds = $swaps->pluck('award_id')->filter()->unique()->values();
-
-            $catalogo = DB::table('dc_catalogo_productos as cdp')
-                ->where('cdp.id_plataforma', $plataformaModel->id)
-                ->where('cdp.tipo_producto', $request->tipo_producto)
-                ->whereIn('cdp.id_producto_brimagy', $awardIds)
-                ->select('cdp.id', 'cdp.id_proveedor', 'cdp.sku', 'cdp.id_producto_brimagy')
-                ->get()
-                ->keyBy('id_producto_brimagy');
-
-            $swapIds = $swaps->pluck('id')->unique()->values();
-
-            $validaciones = DB::table('dc_validacion_canje')
-                ->whereIn('id_canje', $swapIds)
-                ->orderBy('id', 'desc')
-                ->get()
-                ->groupBy('id_canje')
-                ->map(fn($grupo) => $grupo->first());
-
-            $canjes = $swaps
-                ->map(function ($swap) use ($catalogo, $validaciones) {
-                    $producto = $catalogo->get($swap->award_id);
-
-                    if (!$producto) {
-                        return null;
-                    }
-
-                    $validacion = $validaciones->get($swap->id);
-
-                    return (object) array_merge((array) $swap, [
-                        'id_producto' => $producto->id,
-                        'id_proveedor' => $producto->id_proveedor,
-                        'sku_catalogo' => $producto->sku,
-                        'estado_validacion' => $validacion->estatus ?? null,
-                    ]);
-                })
-                ->filter()
-                ->values();
 
             return $this->sendResponse($canjes);
         } catch (\Throwable $th) {
@@ -603,9 +374,9 @@ class CanjesController extends BaseController
     {
         try {
             $idCanjeDesencriptado = $this->desencriptarCorto($request->id_canje);
-            $idPlataformaDesencriptado = $this->desencriptarCorto($request->plataforma);
+            //$idPlataformaDesencriptado = $this->desencriptarCorto($request->plataforma);
 
-            $plataformaModel = Plataformas::where('nombre', $idPlataformaDesencriptado)->first();
+            $plataformaModel = Plataformas::find($request->plataforma);
             if (!$plataformaModel) {
                 return $this->sendError('La plataforma no existe', null, 404);
             }
@@ -719,8 +490,19 @@ class CanjesController extends BaseController
 
             $validacionExistente = ValidacionCanje::where('id_canje', $request->id)->first();
 
-            $esClubBohn = $request->nombre_plataforma === 'club bohn';
-            $plataforma = $request->nombre_plataforma;
+            if (!$validacionExistente) {
+                DB::rollBack();
+                return $this->sendError('No existe la validación del canje', null, 404);
+            }
+
+            $plataformaModel = Plataformas::find($validacionExistente->id_plataforma);
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma no existe', null, 404);
+            }
+
+            $esClubBohn = $plataformaModel->nombre === 'club bohn';
+            $plataforma = $plataformaModel->nombre;
+            $idPlataforma = $plataformaModel->id;
 
             if ($validacionExistente && !empty($validacionExistente->visible)) {
                 DB::commit();
@@ -749,8 +531,8 @@ class CanjesController extends BaseController
             }
 
             if ($canje) {
-                $this->enviarWhatsApp($canje, $codigoValidacion, null, null, $plataforma);
-                $this->enviarCorreo($canje, $codigoValidacion, null, null, $plataforma);
+                $this->enviarWhatsApp($canje, $codigoValidacion, null, null, $idPlataforma);
+                $this->enviarCorreo($canje, $codigoValidacion, null, null, $idPlataforma);
             }
 
             $log['evento'] = 'Creación de código de validación';
@@ -802,11 +584,15 @@ class CanjesController extends BaseController
                     ]);
             }
 
-            $plataformaDesencriptada = $this->desencriptarCorto($request->plataforma);
+            //$plataformaDesencriptada = $this->desencriptarCorto($request->plataforma);
+            $plataformaDatos = Plataformas::find($validarCanjePorCodigo->id_plataforma);
+            if (!$plataformaDatos) {
+                return $this->sendError('La plataforma no existe', null, 404);
+            }
+            $nombrePlataforma = $plataformaDatos->nombre;
+            $idPlataforma = $plataformaDatos->id;
 
-            $plataforma = $plataformaDesencriptada === "club_bohn" ? "club bohn" : $plataformaDesencriptada;
-
-            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
+            if ($nombrePlataforma === "club bohn") {
                 $canje = DB::connection('mysql_club_bohn')
                     ->table('swaps_view')
                     ->where('id', $request->id_canje)
@@ -820,8 +606,8 @@ class CanjesController extends BaseController
             $validado = true;
 
             if ($validacion) {
-                $this->enviarWhatsApp($canje, null, $validado, null, $plataforma);
-                $this->enviarCorreo($canje, null, $validado);
+                $this->enviarWhatsApp($canje, null, $validado, null, $idPlataforma);
+                $this->enviarCorreo($canje, null, $validado, null, $idPlataforma);
             }
 
             return $this->sendResponse($validacion, 'Canje validado correctamente');
@@ -850,18 +636,28 @@ class CanjesController extends BaseController
             if (!$plataformaModel) {
                 return $this->sendError('La plataforma no existe', null, 404);
             }
+            $id_plataforma = $plataformaModel->id;
+            $validacionDatos = ValidacionCanje::where('id_canje', $request->id)->first();
 
             $user = Auth::user();
-            $validacion = ValidacionCanje::create([
-                'id_canje' => $request->id,
-                'id_producto' => $request->id_producto,
-                'cantidad_producto' => $request->number_of_awards,
-                'id_proveedor' => $request->id_proveedor,
-                'id_usuario_admin' => $user->id,
-                'id_plataforma' => $plataformaModel->id,
-                'estatus' => 'identidad_validada',
-                'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
-            ]);
+            if (!$validacionDatos) {
+                $validacion = ValidacionCanje::create([
+                    'id_canje' => $request->id,
+                    'id_producto' => $request->id_producto,
+                    'cantidad_producto' => $request->number_of_awards,
+                    'id_proveedor' => $request->id_proveedor,
+                    'id_usuario_admin' => $user->id,
+                    'id_plataforma' => $id_plataforma,
+                    'estatus' => 'identidad_validada',
+                    'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
+                ]);
+            } else {
+                $validacion = ValidacionCanje::where('id_canje', $request->id)
+                    ->update([
+                        'estatus' => "identidad_validada",
+                        'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
+                    ]);
+            }
 
             if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
                 $canje = DB::connection('mysql_club_bohn')
@@ -877,7 +673,7 @@ class CanjesController extends BaseController
             $validado = true;
 
             if ($validacion) {
-                $this->enviarWhatsApp($canje, null, $validado, null, $plataforma);
+                $this->enviarWhatsApp($canje, null, $validado, null, $id_plataforma);
                 $this->enviarCorreo($canje, null, $validado, null);
             }
             $log['evento'] = 'Canje validado directamente';
@@ -887,10 +683,128 @@ class CanjesController extends BaseController
 
             DB::commit();
 
-            return $this->sendResponse($validacion, 'Validación realizada exitosamente.');
+            return $this->sendResponse('Validación realizada exitosamente.');
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError('Error al validar', $th->getMessage(), 500);
+        }
+    }
+    private function enviarWhatsApp($canje, $codigo = null, $validado = null, $proveedor = null, $plataforma = null)
+    {
+        try {
+            //conseguir los telefonos de todos los administradores
+            $telefonosAdmins = UsuariosPlataforma::where('tipo_usuario', 7)
+                ->whereNotNull('telefono')
+                ->where('telefono', '!=', '')
+                ->pluck('telefono')
+                ->toArray();
+
+            $canjeIdEncriptado = $this->encriptarCorto($canje->id);
+            $plataformaDatos = Plataformas::find($plataforma);
+            if (!$plataformaDatos) {
+                Log::error("Correo: no se encontró la plataforma con id '{$plataforma}'");
+                return;
+            }
+            $idPlataforma = $plataformaDatos->id;
+            $nombrePlataforma = $plataformaDatos->nombre;
+
+
+            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$idPlataforma}";
+
+            if ($codigo) {
+                $titulo = "🔐 Código de verificación de identidad 🔐";
+                $mensaje = "Ha solicitado un código para verificar su identidad, ingresa a la web y coloca el siguiente código para verificarte:\n\n" .
+                    "🔐 Código: *{$codigo}*\n\n" .
+                    "🔗 Link hacia la web:\n{$urlva}\n\n";
+
+                $this->whatsappService->sendMessage($canje->phone, $titulo);
+                $this->whatsappService->sendMessage($canje->phone, $mensaje);
+            } else if ($validado) {
+                $titulo = "✅ Identidad validada correctamente ✅";
+                $mensaje = "Se ha validado la identidad de un canje por parte de un cliente, los datos validados corresponden a:\n\n" .
+                    "👤 Cliente: {$canje->name}\n" .
+                    "📧 Correo: {$canje->email}\n" .
+                    "📱 Teléfono: {$canje->phone}\n" .
+                    "🎁 Premio: {$canje->desc}\n" .
+                    "📄 Folio: {$canje->folio}\n" .
+                    "💻 Plataforma: {$nombrePlataforma}\n";
+
+                foreach ($telefonosAdmins as $telefono) {
+                    $this->whatsappService->sendMessage($telefono, $titulo);
+                    $this->whatsappService->sendMessage($telefono, $mensaje);
+                }
+            } else {
+                $titulo = "🔔 Nueva solicitud de validación de identidad 🔔";
+                $mensaje = "📋 *Detalles del canje:*\n\n" .
+                    "👤 Cliente: {$canje->name}\n" .
+                    "📧 Correo: {$canje->email}\n" .
+                    "📱 Teléfono: {$canje->phone}\n" .
+                    "🎁 Premio: {$canje->desc}\n" .
+                    "📄 Folio: {$canje->folio}\n" .
+                    "🔗 Link para validación:\n{$urlva}\n\n" .
+                    "💻 Plataforma: {$nombrePlataforma}\n" .
+                    "✅ Por favor, proceder con la validación de identidad.";
+
+                $this->whatsappService->sendMessage($canje->phone, $titulo);
+                $this->whatsappService->sendMessage($canje->phone, $mensaje);
+            }
+
+            return $this->sendResponse('Validación enviada exitosamente.');
+        } catch (\Throwable $th) {
+            Log::error("Error al enviar WhatsApp: " . $th->getMessage());
+        }
+    }
+
+    private function enviarCorreo($canje, $codigo = null, $validado = null, $proveedor = null, $plataforma = null)
+    {
+        try {
+            $destinatarios = [
+                'carrera.jorge@dirac.mx'
+            ];
+            //conseguir los correos de todos los administradores
+            $correosAdmins = UsuariosPlataforma::where('tipo_usuario', 7)
+                ->whereNotNull('email')
+                ->where('email', '!=', '')
+                ->pluck('email')
+                ->toArray();
+
+            $canjeData = (object) [
+                'folio' => $canje->folio,
+                'nombre_usuario' => $canje->name,
+                'email' => $canje->email,
+                'phone' => $canje->phone,
+                'nombre_premio' => $canje->desc,
+                'puntos_canjeados' => $canje->points_swap,
+                'calle' => $canje->street,
+                'numero_calle' => $canje->number,
+                'colonia' => $canje->colony,
+                'municipio' => $canje->municipality,
+                'codigo_postal' => $canje->postal_code,
+            ];
+
+            $canjeIdEncriptado = $this->encriptarCorto($canje->id);
+            $plataformaDatos = Plataformas::find($plataforma);
+            if (!$plataformaDatos) {
+                Log::error("Correo: no se encontró la plataforma con id '{$plataforma}'");
+                return;
+            }
+            $idPlataforma = $plataformaDatos->id;
+
+            $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$idPlataforma}";
+
+            if ($codigo) {
+                Mail::to($canjeData->email)->send(new SolicitarCodigo($canjeData, $codigo, $urlva));
+            } else if ($validado) {
+                foreach ($correosAdmins as $correo) {
+                    Mail::to($correo)->send(new IdentidadValidada($canjeData, $codigo, $urlva));
+                }
+            } else {
+                Mail::to($canjeData->email)->send(new ValidacionCanjeEnviada($canjeData, $codigo, $urlva));
+            }
+
+            Log::info("Correo enviado correctamente");
+        } catch (\Exception $e) {
+            Log::error("Error al enviar correo: " . $e->getMessage());
         }
     }
 }

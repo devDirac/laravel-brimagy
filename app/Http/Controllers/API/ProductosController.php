@@ -20,11 +20,14 @@ use App\Models\CatalogoProductos;
 use App\Models\CatalogoProveedores;
 use App\Models\CategoriaClub;
 use App\Models\ColoresClub;
+use App\Models\ColoresLocal;
 use App\Models\FotosOfertas;
 use App\Models\FotosOfertasBrimagy;
+use App\Models\FotosOfertasLocal;
 use App\Models\FotosProducto;
 use App\Models\FotosProductoBrimagy;
 use App\Models\FotosProductoClub;
+use App\Models\MontosLocal;
 use App\Models\Plataformas;
 use App\Models\ProductoBrimagy;
 use App\Models\ProductoClub;
@@ -34,6 +37,7 @@ use App\Models\SubCategoriaClub;
 use App\Models\Tallas;
 use App\Models\TallasBrimagy;
 use App\Models\TallasClub;
+use App\Models\TallasLocal;
 use App\Models\ValidacionCanje;
 use App\Models\VariablesGlobales;
 use Carbon\Carbon;
@@ -364,7 +368,14 @@ class ProductosController extends BaseController
                             ]);
                             break;
                         case "puntotes":
+                            //crear en puntotes
                             $color_brimagy = ColoresBrimagy::create([
+                                'award_id' => $producto_brimagy->id,
+                                'color' => $request->color,
+                                'status' => "ACTIVE",
+                            ]);
+                            //crear en puntotes local
+                            ColoresLocal::create([
                                 'award_id' => $producto_brimagy->id,
                                 'color' => $request->color,
                                 'status' => "ACTIVE",
@@ -392,7 +403,14 @@ class ProductosController extends BaseController
                             ]);
                             break;
                         case "puntotes":
+                            //insertar en puntotes
                             $talla_brimagy = TallasBrimagy::create([
+                                'award_id' => $producto_brimagy->id,
+                                'size' => $request->talla,
+                                'status' => "ACTIVE",
+                            ]);
+                            //insertar en puntotes local
+                            TallasLocal::create([
                                 'award_id' => $producto_brimagy->id,
                                 'size' => $request->talla,
                                 'status' => "ACTIVE",
@@ -499,7 +517,14 @@ class ProductosController extends BaseController
                         ]);
                         break;
                     case "puntotes":
+                        //crear en puntotes
                         $color_brimagy = ColoresBrimagy::create([
+                            'award_id' => $producto_brimagy->id ?? $producto_brimagy_existente->id,
+                            'color' => $request->color,
+                            'status' => "ACTIVE",
+                        ]);
+                        //crear en puntotes local
+                        ColoresLocal::create([
                             'award_id' => $producto_brimagy->id ?? $producto_brimagy_existente->id,
                             'color' => $request->color,
                             'status' => "ACTIVE",
@@ -527,7 +552,14 @@ class ProductosController extends BaseController
                         ]);
                         break;
                     case "puntotes":
+                        //crear en puntotes
                         $talla_brimagy = TallasBrimagy::create([
+                            'award_id' => $producto_brimagy->id ?? $producto_brimagy_existente->id,
+                            'size' => $request->talla,
+                            'status' => "ACTIVE",
+                        ]);
+                        //crear en puntotes local
+                        TallasBrimagy::create([
                             'award_id' => $producto_brimagy->id ?? $producto_brimagy_existente->id,
                             'size' => $request->talla,
                             'status' => "ACTIVE",
@@ -595,7 +627,10 @@ class ProductosController extends BaseController
                 $colorExistenteBrimagy = ColoresClub::where('id', $request->id_color_brimagy)->first();
             } else {
                 $colorExistente = Colores::where('id', $request->id_color)->first();
+                //buscar en puntotes
                 $colorExistenteBrimagy = ColoresBrimagy::where('id', $request->id_color_brimagy)->first();
+                //buscar en puntotes local
+                $colorExistenteLocal = ColoresLocal::where('id', $request->id_color_brimagy)->first();
             }
 
             if ($colorExistente) {
@@ -622,7 +657,14 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
+                //actualizar en puntotes
                 $colorExistenteBrimagy->update([
+                    'color' => $request->color,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+                //actualizar en puntotes local
+                $colorExistenteLocal->update([
                     'color' => $request->color,
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
@@ -668,7 +710,14 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                 ]);
             } else {
+                //crear en puntotes
                 $productoBrimagy = ColoresBrimagy::create([
+                    'award_id' => $request->id_producto_brimagy,
+                    'color' => $request->color,
+                    'status' => "ACTIVE",
+                ]);
+                //crear en puntotes local
+                ColoresBrimagy::create([
                     'award_id' => $request->id_producto_brimagy,
                     'color' => $request->color,
                     'status' => "ACTIVE",
@@ -742,7 +791,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === "club_bohn") {
                 $color_brimagy = ColoresClub::find($request->id_color_brimagy);
             } else {
+                //buscar en puntotes
                 $color_brimagy = ColoresBrimagy::find($request->id_color_brimagy);
+                //buscar en puntotes local
+                $color_brimagy_local = ColoresLocal::find($request->id_color_brimagy);
             }
 
             if (!$color) {
@@ -753,11 +805,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Este color no se encuentra', 'error', 404);
             }
+            if (!$color_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Este color no se encuentra', 'error', 404);
+            }
 
             $color->update([
                 'status' => "INACTIVE",
             ]);
+            //actualizar en puntotes
             $color_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $color_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
 
@@ -794,7 +855,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === "club_bohn") {
                 $color_brimagy = ColoresClub::find($request->id_color_brimagy);
             } else {
+                //buscar en puntotes
                 $color_brimagy = ColoresBrimagy::find($request->id_color_brimagy);
+                //buscar en puntotes local
+                $color_brimagy_local = ColoresLocal::find($request->id_color_brimagy);
             }
 
             if (!$color) {
@@ -809,7 +873,12 @@ class ProductosController extends BaseController
             $color->update([
                 'status' => "ACTIVE",
             ]);
+            //actualizar en puntotes
             $color_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $color_brimagy_local->update([
                 'status' => "ACTIVE",
             ]);
 
@@ -852,7 +921,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === "club_bohn") {
                 $tallaExistenteBrimagy = TallasClub::where('id', $request->id_talla_brimagy)->first();
             } else {
+                //buscar en puntotes
                 $tallaExistenteBrimagy = TallasBrimagy::where('id', $request->id_talla_brimagy)->first();
+                //buscar en puntotes local
+                $tallaExistenteLocal = TallasBrimagy::where('id', $request->id_talla_brimagy)->first();
             }
 
             if ($tallaExistente) {
@@ -879,7 +951,14 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
+                //actualizar en puntotes
                 $tallaExistenteBrimagy->update([
+                    'size' => $request->talla,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+                //actualizar en puntotes local
+                $tallaExistenteLocal->update([
                     'size' => $request->talla,
                     'status' => "ACTIVE",
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
@@ -925,7 +1004,14 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                 ]);
             } else {
+                //crear en puntotes
                 $tallaBrimagy = TallasBrimagy::create([
+                    'award_id' => $request->id_producto_brimagy,
+                    'size' => $request->talla,
+                    'status' => "ACTIVE",
+                ]);
+                //crear en puntotes local
+                TallasBrimagy::create([
                     'award_id' => $request->id_producto_brimagy,
                     'size' => $request->talla,
                     'status' => "ACTIVE",
@@ -1000,7 +1086,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === "club_bohn") {
                 $talla_brimagy = TallasClub::find($request->id_talla_brimagy);
             } else {
+                //buscar en puntotes
                 $talla_brimagy = TallasBrimagy::find($request->id_talla_brimagy);
+                //buscar en puntotes local
+                $talla_brimagy_local = TallasLocal::find($request->id_talla_brimagy);
             }
 
 
@@ -1012,11 +1101,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta talla no se encuentra', 'error', 404);
             }
+            if (!$talla_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
 
             $talla->update([
                 'status' => "INACTIVE",
             ]);
+            //actualizar en puntotes
             $talla_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $talla_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
 
@@ -1054,7 +1152,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === "club_bohn") {
                 $talla_brimagy = TallasClub::find($request->id_talla_brimagy);
             } else {
+                //buscar en puntotes
                 $talla_brimagy = TallasBrimagy::find($request->id_talla_brimagy);
+                //buscar en puntotes local
+                $talla_brimagy_local = TallasBrimagy::find($request->id_talla_brimagy);
             }
 
             if (!$talla) {
@@ -1065,11 +1166,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta talla no se encuentra', 'error', 404);
             }
+            if (!$talla_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta talla no se encuentra', 'error', 404);
+            }
 
             $talla->update([
                 'status' => "ACTIVE",
             ]);
+            //actualizar en puntotes
             $talla_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $talla_brimagy_local->update([
                 'status' => "ACTIVE",
             ]);
 
@@ -2551,7 +2661,14 @@ class ProductosController extends BaseController
                         'status' => "ACTIVE",
                     ]);
                 } else {
+                    //crear en puntotes
                     $fotoDirac = FotosOfertasBrimagy::create([
+                        'award_id' => $request->id_producto_brimagy,
+                        'offer' => $nombreUnico,
+                        'status' => "ACTIVE",
+                    ]);
+                    //crear en puntotes local
+                    FotosOfertasBrimagy::create([
                         'award_id' => $request->id_producto_brimagy,
                         'offer' => $nombreUnico,
                         'status' => "ACTIVE",
@@ -2628,7 +2745,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $foto_brimagy = FotosOfertasClub::find($request->id_foto_promo_brimagy);
             } else {
+                //buscar en puntotes
                 $foto_brimagy = FotosOfertasBrimagy::find($request->id_foto_promo_brimagy);
+                //buscar en puntotes local
+                $foto_brimagy_local = FotosOfertasLocal::find($request->id_foto_promo_brimagy);
             }
 
             if (!$foto) {
@@ -2639,11 +2759,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta foto no se encuentra', 'error', 404);
             }
+            if (!$foto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
 
             $foto->update([
                 'status' => "INACTIVE",
             ]);
+            //actualizar en puntotes
             $foto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $foto_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
 
@@ -2681,7 +2810,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $foto_brimagy = FotosOfertasClub::find($request->id_foto_promo_brimagy);
             } else {
+                //buscar en puntotes
                 $foto_brimagy = FotosOfertasBrimagy::find($request->id_foto_promo_brimagy);
+                //buscar en puntotes local
+                $foto_brimagy_local = FotosOfertasLocal::find($request->id_foto_promo_brimagy);
             }
 
             if (!$foto) {
@@ -2692,11 +2824,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta foto no se encuentra', 'error', 404);
             }
+            if (!$foto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
 
             $foto->update([
                 'status' => "ACTIVE",
             ]);
+            //actualizar en puntotes
             $foto_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+            //actualizar en puntotes local
+            $foto_brimagy_local->update([
                 'status' => "ACTIVE",
             ]);
 
@@ -2741,7 +2882,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $montoExistenteBrimagy = MontosClub::where('id', $request->id_monto_brimagy)->first();
             } else {
+                //buscar en puntotes
                 $montoExistenteBrimagy = MontosBrimagy::where('id', $request->id_monto_brimagy)->first();
+                //buscar en puntotes local
+                $montoExistenteLocal = MontosLocal::where('id', $request->id_monto_brimagy)->first();
             }
 
             if ($montoExistente) {
@@ -2775,7 +2919,16 @@ class ProductosController extends BaseController
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
 
+                //actualizar puntotes
                 $montoExistenteBrimagy->update([
+                    'monto' => $request->monto,
+                    'points' => $request->puntos,
+                    'descripcion' => $request->descripcion,
+                    'status' => "ACTIVE",
+                    'updated_at' => now()->setTimezone('America/Mexico_City'),
+                ]);
+                //actualizar puntotes local
+                $montoExistenteLocal->update([
                     'monto' => $request->monto,
                     'points' => $request->puntos,
                     'descripcion' => $request->descripcion,
@@ -2826,7 +2979,16 @@ class ProductosController extends BaseController
                     'status' => "ACTIVE",
                 ]);
             } else {
+                //crear en puntotes
                 $montoBrimagy = MontosBrimagy::create([
+                    'award_id' => $request->id_producto_brimagy,
+                    'monto' => $request->monto,
+                    'points' => $request->puntos,
+                    'descripcion' => $request->descripcion,
+                    'status' => "ACTIVE",
+                ]);
+                //crear en puntotes local
+                MontosBrimagy::create([
                     'award_id' => $request->id_producto_brimagy,
                     'monto' => $request->monto,
                     'points' => $request->puntos,
@@ -2907,7 +3069,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $monto_brimagy = MontosClub::find($request->id_monto_brimagy);
             } else {
+                //buscar en puntotes
                 $monto_brimagy = MontosBrimagy::find($request->id_monto_brimagy);
+                //buscar en puntotes local
+                $monto_brimagy_local = MontosLocal::find($request->id_monto_brimagy);
             }
 
             if (!$monto) {
@@ -2918,11 +3083,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Este monto no se encuentra', 'error', 404);
             }
+            if (!$monto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Este monto no se encuentra', 'error', 404);
+            }
 
             $monto->update([
                 'status' => "INACTIVE",
             ]);
+            //actualizar puntotes
             $monto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            //actualizar puntotes en local
+            $monto_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
 
@@ -2960,7 +3134,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $monto_brimagy = MontosClub::find($request->id_monto_brimagy);
             } else {
+                //buscar en puntotes
                 $monto_brimagy = MontosBrimagy::find($request->id_monto_brimagy);
+                //buscar en puntotes local
+                $monto_brimagy_local = MontosLocal::find($request->id_monto_brimagy);
             }
 
             if (!$monto) {
@@ -2971,11 +3148,20 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Este monto no se encuentra', 'error', 404);
             }
+            if (!$monto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Este monto no se encuentra', 'error', 404);
+            }
 
             $monto->update([
                 'status' => "ACTIVE",
             ]);
+            //actualizar puntotes
             $monto_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+            //actualizar puntotes en local
+            $monto_brimagy_local->update([
                 'status' => "ACTIVE",
             ]);
 

@@ -14,6 +14,7 @@ use App\Models\Tokens;
 use App\Models\ProcesosTokens;
 use App\Models\BitacoraEventos;
 use App\Models\UserClub;
+use App\Models\UserLocal;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -64,8 +65,27 @@ class AuthController extends BaseController
                     'status' => "ACTIVE",
                     'representative_id' => 1,
                 ]);
-                //añadir usuario también a brimagy
+                //añadir usuario a puntotes
                 $userBrimagy = UserBrimagy::create([
+                    'brimagy_id' => 0,
+                    'representative_id' => 1,
+                    'profile' => "member",
+                    'send_to' => "direct",
+                    'name' => $request->nombre,
+                    'first_last_name' => 0,
+                    'second_last_name' => 0,
+                    'email' => $request->correo,
+                    'password' => bcrypt($request->password),
+                    'phone' => $request->telefono ?? null,
+                    'api_id' => $request->correo,
+                    'password_status' => "to_change",
+                    'last_change_of_password' => "2018-05-17",
+                    'status' => "ACTIVE",
+                    'foto' => $request->foto ?? null,
+                    'tipo_usuario' => $request->permisos,
+                ]);
+                //añadir usuario a puntotes local
+                UserLocal::create([
                     'brimagy_id' => 0,
                     'representative_id' => 1,
                     'profile' => "member",
