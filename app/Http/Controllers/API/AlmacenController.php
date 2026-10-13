@@ -11,6 +11,7 @@ use App\Models\CatalogoProveedores;
 use App\Models\Plataformas;
 use App\Models\ProductoBrimagy;
 use App\Models\ProductoClub;
+use App\Models\ProductoLocal;
 use App\Models\RecepcionAlmacen;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -393,6 +394,16 @@ class AlmacenController extends BaseController
                 ]);
             } else {
                 $producto_brimagy = ProductoBrimagy::create([
+                    'desc' => $nombre_producto,
+                    'features' => $descripcion,
+                    'required_score' => $puntos,
+                    'sub_category_id' => $id_catalogo,
+                    'photo_name' => $foto_producto,
+                    'sku' => $sku,
+                    'TyC' => "",
+                    'validity' => "",
+                ]);
+                ProductoLocal::create([
                     'desc' => $nombre_producto,
                     'features' => $descripcion,
                     'required_score' => $puntos,

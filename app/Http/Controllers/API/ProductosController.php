@@ -27,11 +27,13 @@ use App\Models\FotosOfertasLocal;
 use App\Models\FotosProducto;
 use App\Models\FotosProductoBrimagy;
 use App\Models\FotosProductoClub;
+use App\Models\FotosProductoLocal;
 use App\Models\MontosLocal;
 use App\Models\Plataformas;
 use App\Models\ProductoBrimagy;
 use App\Models\ProductoClub;
 use App\Models\ProductoEditado;
+use App\Models\ProductoLocal;
 use App\Models\SubCategoria;
 use App\Models\SubCategoriaClub;
 use App\Models\Tallas;
@@ -274,6 +276,7 @@ class ProductosController extends BaseController
                     'marca' => $request->marca,
                     'color' => $request->color,
                     'talla' => $request->talla,
+                    'sku' => $request->sku,
                     'id_proveedor' => $id_proveedor,
                     'id_catalogo' => $id_catalogo,
                     'costo_con_iva' => $costo_proveedor_con_iva,
@@ -302,7 +305,9 @@ class ProductosController extends BaseController
                         $producto_brimagy = ProductoClub::find($productoExistente->id_producto_brimagy);
                         break;
                     case "puntotes":
-                        $producto_brimagy = ProductoBrimagy::find($productoExistente->id_producto_brimagy);
+                        //actualizar en puntotes
+                        $producto_brimagy = ProductoBrimagy::find($productoExistente->id_producto_brimagy); //actualizar en local
+                        $producto_brimagy_local = ProductoLocal::find($productoExistente->id_producto_brimagy);
                         break;
                     default:
                         break;
@@ -312,17 +317,11 @@ class ProductosController extends BaseController
                     DB::rollBack();
                     return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
                 }
+                if (!$producto_brimagy_local) {
+                    DB::rollBack();
+                    return $this->sendError('No se encuentra el producto brimagy', 'error', 404);
+                }
 
-                /*$producto_brimagy->update([
-                    'desc' => $request->nombre_producto ?? $producto_brimagy->desc,
-                    'features' => $request->descripcion ?? $producto_brimagy->features,
-                    'required_score' => $puntos ?? $producto_brimagy->required_score,
-                    'sub_category_id' => $request->id_catalogo ?? $producto_brimagy->sub_category_id,
-                    'photo_name' => $nombreUnico ?? $producto_brimagy->photo_name,
-                    'sku' => $request->sku ?? $producto_brimagy->sku,
-                    'TyC' => $request->tyc ?? $producto_brimagy->TyC,
-                    'validity' => $request->vigencia ?? $producto_brimagy->validity,
-                ]);*/
                 $datosBrimagy = [
                     'desc' => $request->nombre_producto ?? $producto_brimagy->desc,
                     'features' => $request->descripcion ?? $producto_brimagy->features,
@@ -338,6 +337,7 @@ class ProductosController extends BaseController
                 }
 
                 $producto_brimagy->update($datosBrimagy);
+                $producto_brimagy_local->update($datosBrimagy);
 
                 if ($request->tipo_registro === 'individual' && $archivo) {
                     $ruta = $archivo->storeAs(
@@ -459,9 +459,22 @@ class ProductosController extends BaseController
                     break;
                 case "puntotes":
                     $producto_brimagy_existente = ProductoBrimagy::find($request->id_producto_brimagy);
+                    $producto_brimagy_existente_local = ProductoLocal::find($request->id_producto_brimagy);
 
                     if (!$producto_brimagy_existente) {
                         $producto_brimagy = ProductoBrimagy::create([
+                            'desc' => $request->nombre_producto,
+                            'features' => $request->descripcion,
+                            'required_score' => $puntos,
+                            'sub_category_id' => $request->id_catalogo,
+                            'photo_name' => $nombreUnico,
+                            'sku' => $request->sku,
+                            'TyC' => $request->tyc,
+                            'validity' => $request->vigencia,
+                        ]);
+                    }
+                    if (!$producto_brimagy_existente_local) {
+                        ProductoLocal::create([
                             'desc' => $request->nombre_producto,
                             'features' => $request->descripcion,
                             'required_score' => $puntos,
@@ -1266,6 +1279,16 @@ class ProductosController extends BaseController
                     'TyC' => "",
                     'validity' => "",
                 ]);
+                ProductoLocal::create([
+                    'desc' => $nombre_producto,
+                    'features' => $descripcion,
+                    'required_score' => $puntos,
+                    'sub_category_id' => $id_catalogo,
+                    'photo_name' => $foto_producto ?: '',
+                    'sku' => $sku,
+                    'TyC' => "",
+                    'validity' => "",
+                ]);
             }
 
             $producto = CatalogoProductos::create([
@@ -1910,6 +1933,8 @@ class ProductosController extends BaseController
                             case "puntotes":
                                 FotosProductoBrimagy::where('id', $foto->id_foto_brimagy)
                                     ->update(['photo' => $foto->nombre]);
+                                FotosProductoLocal::where('id', $foto->id_foto_brimagy)
+                                    ->update(['photo' => $foto->nombre]);
                                 break;
                             default:
                                 break;
@@ -1958,7 +1983,11 @@ class ProductosController extends BaseController
                                     ->update(['photo' => $foto->nombre]);
                                 break;
                             case "puntotes":
+                                //actualizar en puntotes
                                 FotosProductoBrimagy::where('id', $foto->id_foto_brimagy)
+                                    ->update(['photo' => $foto->nombre]);
+                                //actualizar en local
+                                FotosProductoLocal::where('id', $foto->id_foto_brimagy)
                                     ->update(['photo' => $foto->nombre]);
                                 break;
                             default:
@@ -1992,6 +2021,9 @@ class ProductosController extends BaseController
                     $producto_brimagy = ProductoClub::find($request->id_producto_brimagy);
                     break;
                 case "puntotes":
+                    //actualizar en puntotes
+                    $producto_brimagy = ProductoBrimagy::find($request->id_producto_brimagy);
+                    //actualizar en puntotes local
                     $producto_brimagy = ProductoBrimagy::find($request->id_producto_brimagy);
                     break;
                 default:
@@ -2007,7 +2039,6 @@ class ProductosController extends BaseController
                 'desc' => $request->nombre_producto,
                 'required_score' => $puntos,
                 'sub_category_id' => $request->id_catalogo,
-                //'photo_name' => $nombreUnico ?: $producto_brimagy->photo_name,
                 'sku' => $request->sku,
                 'features' => $request->descripcion,
                 'TyC' => $request->tyc,
@@ -2076,13 +2107,21 @@ class ProductosController extends BaseController
                 $producto_brimagy = ProductoClub::find($producto->id_producto_brimagy);
             } else {
                 $producto_brimagy = ProductoBrimagy::find($producto->id_producto_brimagy);
+                $producto_brimagy_local = ProductoLocal::find($producto->id_producto_brimagy);
             }
 
             if (!$producto_brimagy) {
                 DB::rollBack();
                 return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
             }
+            if (!$producto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
+            }
             $producto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            $producto_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
             // Eliminar el producto de catalogo dirac
@@ -2128,13 +2167,21 @@ class ProductosController extends BaseController
                 $producto_brimagy = ProductoClub::find($producto->id_producto_brimagy);
             } else {
                 $producto_brimagy = ProductoBrimagy::find($producto->id_producto_brimagy);
+                $producto_brimagy_local = ProductoLocal::find($producto->id_producto_brimagy);
             }
 
             if (!$producto_brimagy) {
                 DB::rollBack();
                 return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
             }
+            if (!$producto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
+            }
             $producto_brimagy->update([
+                'stock' => 0,
+            ]);
+            $producto_brimagy_local->update([
                 'stock' => 0,
             ]);
             $producto->update([
@@ -2181,13 +2228,21 @@ class ProductosController extends BaseController
                 $producto_brimagy = ProductoClub::find($producto->id_producto_brimagy);
             } else {
                 $producto_brimagy = ProductoBrimagy::find($producto->id_producto_brimagy);
+                $producto_brimagy_local = ProductoLocal::find($producto->id_producto_brimagy);
             }
 
             if (!$producto_brimagy) {
                 DB::rollBack();
                 return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
             }
+            if (!$producto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('No se encuentra el producto en brimagy', 'error', 404);
+            }
             $producto_brimagy->update([
+                'stock' => 1000000,
+            ]);
+            $producto_brimagy_local->update([
                 'stock' => 1000000,
             ]);
             $producto->update([
@@ -2457,7 +2512,14 @@ class ProductosController extends BaseController
                         'status' => "ACTIVE",
                     ]);
                 } else {
+                    //crear en puntotes
                     $fotoDirac = FotosProductoBrimagy::create([
+                        'award_id' => $request->id_producto_brimagy,
+                        'photo' => $nombreUnico,
+                        'status' => "ACTIVE",
+                    ]);
+                    //crear en local
+                    FotosProductoLocal::create([
                         'award_id' => $request->id_producto_brimagy,
                         'photo' => $nombreUnico,
                         'status' => "ACTIVE",
@@ -2533,7 +2595,10 @@ class ProductosController extends BaseController
             if ($request->plataforma === 'club_bohn') {
                 $foto_brimagy = FotosProductoClub::find($request->id_foto_brimagy);
             } else {
+                //buscar en puntotes
                 $foto_brimagy = FotosProductoBrimagy::find($request->id_foto_brimagy);
+                //buscar en local
+                $foto_brimagy_local = FotosProductoLocal::find($request->id_foto_brimagy);
             }
 
             if (!$foto) {
@@ -2544,11 +2609,18 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta foto no se encuentra', 'error', 404);
             }
+            if (!$foto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
 
             $foto->update([
                 'status' => "INACTIVE",
             ]);
             $foto_brimagy->update([
+                'status' => "INACTIVE",
+            ]);
+            $foto_brimagy_local->update([
                 'status' => "INACTIVE",
             ]);
 
@@ -2586,6 +2658,7 @@ class ProductosController extends BaseController
                 $foto_brimagy = FotosProductoClub::find($request->id_foto_brimagy);
             } else {
                 $foto_brimagy = FotosProductoBrimagy::find($request->id_foto_brimagy);
+                $foto_brimagy_local = FotosProductoLocal::find($request->id_foto_brimagy);
             }
 
             if (!$foto) {
@@ -2596,11 +2669,18 @@ class ProductosController extends BaseController
                 DB::rollBack();
                 return $this->sendError('Esta foto no se encuentra', 'error', 404);
             }
+            if (!$foto_brimagy_local) {
+                DB::rollBack();
+                return $this->sendError('Esta foto no se encuentra', 'error', 404);
+            }
 
             $foto->update([
                 'status' => "ACTIVE",
             ]);
             $foto_brimagy->update([
+                'status' => "ACTIVE",
+            ]);
+            $foto_brimagy_local->update([
                 'status' => "ACTIVE",
             ]);
 
