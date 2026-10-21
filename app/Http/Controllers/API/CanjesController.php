@@ -71,6 +71,9 @@ class CanjesController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'id' => 'required|integer',
+                'productos' => 'required|array|min:1',
+                'productos.*.id_producto' => 'required|integer',
+                'productos.*.number_of_awards' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -82,6 +85,7 @@ class CanjesController extends BaseController
             // es club bohn
             $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
             if (!$plataformaModel) {
+                DB::rollBack();
                 return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
             }
             $id_plataforma = $plataformaModel->id;
@@ -89,27 +93,9 @@ class CanjesController extends BaseController
             $canjeValidado = ValidacionCanje::where('id_canje', $request->id)->first();
 
             $user = Auth::user();
-            if (!$canjeValidado) {
-                $validacion = ValidacionCanje::create([
-                    'id_canje' => $request->id,
-                    'id_producto' => $request->id_producto,
-                    'cantidad_producto' => $request->number_of_awards,
-                    'id_proveedor' => $request->id_proveedor,
-                    'id_usuario_admin' => $user->id,
-                    'id_plataforma' => $id_plataforma
-                ]);
-            }
+            $this->registrarProductos($request, $user->id, $id_plataforma);
 
-            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
-                $canje = DB::connection('mysql_club_bohn')
-                    ->table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            } else {
-                $canje = DB::table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            }
+            $canje = $this->obtenerCanje($request->id, $request->plataforma === 'club_bohn');
 
             if ($canje) {
                 $this->enviarWhatsApp($canje, null, null, null, $id_plataforma);
@@ -117,7 +103,7 @@ class CanjesController extends BaseController
             }
 
             $log['evento'] = 'Creación de validación de cliente';
-            $log['descripcion'] = "El usuario con id: {$user->id} envió un mensaje para validar el canje: {$canje->folio}";
+            $log['descripcion'] = "El usuario con id: {$user->id} envió un mensaje para validar el canje: ($canje->folio ?? $request->id);";
             $log['id_usuario'] = $user->id;
             BitacoraEventos::create($log);
 
@@ -134,6 +120,50 @@ class CanjesController extends BaseController
     {
         $codigo = random_int(100000, 999999);
         return $codigo;
+    }
+    /**
+     * Trae TODAS las filas del canje (una por producto) y devuelve la primera
+     * con los datos agregados para mensajes y correos.
+     */
+    private function obtenerCanje($id, bool $esClubBohn)
+    {
+        $tabla = $esClubBohn
+            ? DB::connection('mysql_club_bohn')->table('swaps_view')
+            : DB::table('swaps_view');
+
+        $filas = $tabla->where('id', $id)->get();
+        $canje = $filas->first();
+
+        if (!$canje) {
+            return null;
+        }
+
+        $canje->premios = $filas->pluck('desc')->filter()->implode(', ');
+        $canje->puntos_total = $filas->sum('points_swap');
+        $canje->productos = $filas->map(fn($f) => (object) [
+            'nombre' => $f->desc,
+            'cantidad' => $f->number_of_awards,
+            'puntos' => $f->points_swap,
+        ])->values();
+
+        return $canje;
+    }
+    /**
+     * Crea una fila en dc_validacion_canje por cada producto que aún no la tenga.
+     */
+    private function registrarProductos(Request $request, int $userId, int $idPlataforma, array $extra = []): void
+    {
+        foreach ($request->input('productos', []) as $p) {
+            ValidacionCanje::firstOrCreate(
+                ['id_canje' => $request->id, 'id_producto' => $p['id_producto']],
+                array_merge([
+                    'cantidad_producto' => $p['number_of_awards'],
+                    'id_proveedor' => $p['id_proveedor'] ?? null,
+                    'id_usuario_admin' => $userId,
+                    'id_plataforma' => $idPlataforma,
+                ], $extra)
+            );
+        }
     }
     private function encriptarCorto($id)
     {
@@ -191,7 +221,7 @@ class CanjesController extends BaseController
                     'cdp.id as id_producto',
                     'cdp.id_proveedor',
                     'cdp.sku as sku_catalogo',
-                    DB::raw('(SELECT vc.estatus FROM dc_validacion_canje vc WHERE vc.id_canje = sp.id LIMIT 1) as estado_validacion')
+                    'vc.estatus as estado_validacion'
                 )
                 ->where('cdp.tipo_producto', $request->tipo_producto);
 
@@ -370,11 +400,39 @@ class CanjesController extends BaseController
             return $this->sendError('Error al obtener los canjes de club bohn', $th, 500);
         }
     }
+    private function columnasCanje(): array
+    {
+        return [
+            'sp.id',
+            'sp.folio',
+            'sp.name as nombre_usuario',
+            'sp.email',
+            'sp.phone',
+            'sp.number_of_awards',
+            'sp.size',
+            'sp.color',
+            'sp.category',
+            'sp.points_swap as puntos_canjeados',
+            'sp.desc as nombre_premio',
+            'sp.required_score as costo_premio',
+            'sp.sku',
+            'sp.street as calle',
+            'sp.number as numero_calle',
+            'sp.colony as colonia',
+            'sp.postal_code as codigo_postal',
+            'sp.municipality as municipio',
+            'sp.inside as numero_interior',
+            'sp.between_1',
+            'sp.between_2',
+            'sp.additional_reference as referencia_adicional',
+            'sp.created_at as creacion_canje',
+            'sp.status as estado_canje',
+        ];
+    }
     public function getCanjeById(Request $request)
     {
         try {
-            $idCanjeDesencriptado = $this->desencriptarCorto($request->id_canje);
-            //$idPlataformaDesencriptado = $this->desencriptarCorto($request->plataforma);
+            $idCanje = $this->desencriptarCorto($request->id_canje);
 
             $plataformaModel = Plataformas::find($request->plataforma);
             if (!$plataformaModel) {
@@ -383,91 +441,55 @@ class CanjesController extends BaseController
 
             $esClubBohn = $plataformaModel->nombre === 'club bohn';
 
-            if ($esClubBohn) {
-                $canje = DB::connection('mysql_club_bohn')
-                    ->table('swaps_view as sp')
-                    ->select(
-                        'sp.id',
-                        'sp.folio',
-                        'sp.name as nombre_usuario',
-                        'sp.email',
-                        'sp.phone',
-                        'sp.number_of_awards',
-                        'sp.size',
-                        'sp.color',
-                        'sp.category',
-                        'sp.points_swap as puntos_canjeados',
-                        'sp.desc as nombre_premio',
-                        'sp.required_score as costo_premio',
-                        'sp.sku',
-                        'sp.street as calle',
-                        'sp.number as numero_calle',
-                        'sp.colony as colonia',
-                        'sp.postal_code as codigo_postal',
-                        'sp.municipality as municipio',
-                        'sp.inside as numero_interior',
-                        'sp.between_1',
-                        'sp.between_2',
-                        'sp.additional_reference as referencia_adicional',
-                        'sp.created_at as creacion_canje',
-                        'sp.status as estado_canje'
-                    )
-                    ->where('sp.id', $idCanjeDesencriptado)
-                    ->first();
+            // Una fila por producto del canje
+            $filas = ($esClubBohn ? DB::connection('mysql_club_bohn') : DB::connection())
+                ->table('swaps_view as sp')
+                ->select($this->columnasCanje())
+                ->where('sp.id', $idCanje)
+                ->get();
 
-                if ($canje) {
-                    $validacion = DB::table('dc_validacion_canje as vc')
-                        ->where('id_canje', $idCanjeDesencriptado)
-                        ->leftJoin('dc_plataformas as p', 'vc.id_plataforma', '=', 'p.id')
-                        ->orderBy('vc.id', 'desc')
-                        ->first();
-
-                    $canje = (object) array_merge((array) $canje, [
-                        'estado_validacion' => $validacion->estatus ?? null,
-                        'nombre_plataforma' => $validacion->nombre ?? null,
-                        'codigo_validacion' => $validacion->codigo_validacion ?? null,
-                    ]);
-                }
-            } else {
-                $canje = DB::table('swaps_view as sp')
-                    ->select(
-                        'sp.id',
-                        'sp.folio',
-                        'sp.name as nombre_usuario',
-                        'sp.email',
-                        'sp.phone',
-                        'sp.number_of_awards',
-                        'sp.size',
-                        'sp.color',
-                        'sp.category',
-                        'sp.points_swap as puntos_canjeados',
-                        'sp.desc as nombre_premio',
-                        'sp.required_score as costo_premio',
-                        'sp.sku',
-                        'sp.street as calle',
-                        'sp.number as numero_calle',
-                        'sp.colony as colonia',
-                        'sp.postal_code as codigo_postal',
-                        'sp.municipality as municipio',
-                        'sp.inside as numero_interior',
-                        'sp.between_1',
-                        'sp.between_2',
-                        'sp.additional_reference as referencia_adicional',
-                        'sp.created_at as creacion_canje',
-                        'sp.status as estado_canje',
-                        'vc.estatus as estado_validacion',
-                        'vc.codigo_validacion',
-                        'p.nombre as nombre_plataforma'
-                    )
-                    ->leftJoin('dc_validacion_canje as vc', 'vc.id_canje', '=', 'sp.id')
-                    ->leftJoin('dc_plataformas as p', 'p.id', '=', 'vc.id_plataforma')
-                    ->where('sp.id', $idCanjeDesencriptado)
-                    ->first();
-            }
-
-            if (!$canje) {
+            $primera = $filas->first();
+            if (!$primera) {
                 return $this->sendError('Canje no encontrado', null, 404);
             }
+
+            // Estatus global del canje: la validación más reciente
+            $validacion = DB::table('dc_validacion_canje as vc')
+                ->leftJoin('dc_plataformas as p', 'p.id', '=', 'vc.id_plataforma')
+                ->where('vc.id_canje', $idCanje)
+                ->orderBy('vc.id', 'desc')
+                ->select('vc.estatus', 'vc.codigo_validacion', 'p.nombre as nombre_plataforma')
+                ->first();
+
+            // Campos que cambian de un producto a otro
+            $camposProducto = [
+                'number_of_awards',
+                'size',
+                'color',
+                'category',
+                'puntos_canjeados',
+                'nombre_premio',
+                'costo_premio',
+                'sku',
+            ];
+
+            $productos = $filas->map(
+                fn($f) => collect((array) $f)->only($camposProducto)->all()
+            )->values();
+
+            $canje = (object) array_merge(
+                collect((array) $primera)->except($camposProducto)->all(),
+                [
+                    'estado_validacion' => $validacion->estatus ?? null,
+                    'nombre_plataforma' => $validacion->nombre_plataforma ?? null,
+                    'codigo_validacion' => $validacion->codigo_validacion ?? null,
+                    'productos' => $productos,
+                    'total_puntos' => $filas->sum('puntos_canjeados'),
+                    'total_premios' => $filas->sum('number_of_awards'),
+                    'nombre_premio' => $filas->pluck('nombre_premio')->filter()->implode(', '),
+                    'puntos_canjeados' => $filas->sum('puntos_canjeados'),
+                ]
+            );
 
             return $this->sendResponse($canje, 'Canje encontrado');
         } catch (\Throwable $th) {
@@ -497,6 +519,7 @@ class CanjesController extends BaseController
 
             $plataformaModel = Plataformas::find($validacionExistente->id_plataforma);
             if (!$plataformaModel) {
+                DB::rollBack();
                 return $this->sendError('La plataforma no existe', null, 404);
             }
 
@@ -511,24 +534,13 @@ class CanjesController extends BaseController
 
             $codigoValidacion = $this->generarCodigoUnico();
 
-            $validacion = ValidacionCanje::updateOrCreate(
-                ['id_canje' => $request->id],
-                [
-                    'codigo_validacion' => $codigoValidacion,
-                    'estatus' => 'solicitud_enviada'
-                ]
-            );
+            ValidacionCanje::where('id_canje', $request->id)->update([
+                'codigo_validacion' => $codigoValidacion,
+                'estatus' => 'solicitud_enviada',
+            ]);
+            $validacion = ValidacionCanje::where('id_canje', $request->id)->first();
 
-            if ($esClubBohn) {
-                $canje = DB::connection('mysql_club_bohn')
-                    ->table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            } else {
-                $canje = DB::table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            }
+            $canje = $this->obtenerCanje($request->id, $esClubBohn);
 
             if ($canje) {
                 $this->enviarWhatsApp($canje, $codigoValidacion, null, null, $idPlataforma);
@@ -570,47 +582,39 @@ class CanjesController extends BaseController
     public function validarIdentidadPorCodigo(Request $request)
     {
         try {
-            $validarCanjePorCodigo = ValidacionCanje::where('id_canje', $request->id_canje)
+            $validacionPorCodigo = ValidacionCanje::where('id_canje', $request->id_canje)
                 ->where('codigo_validacion', $request->codigo)
                 ->first();
 
-            if (!$validarCanjePorCodigo) {
+            if (!$validacionPorCodigo) {
                 return $this->sendError('No coincide el código de validación', null, 500);
-            } else {
-                $validacion = ValidacionCanje::where('id_canje', $request->id_canje)
-                    ->update([
-                        'estatus' => "identidad_validada",
-                        'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
-                    ]);
             }
 
-            //$plataformaDesencriptada = $this->desencriptarCorto($request->plataforma);
-            $plataformaDatos = Plataformas::find($validarCanjePorCodigo->id_plataforma);
+            $plataformaDatos = Plataformas::find($validacionPorCodigo->id_plataforma);
             if (!$plataformaDatos) {
                 return $this->sendError('La plataforma no existe', null, 404);
             }
             $nombrePlataforma = $plataformaDatos->nombre;
             $idPlataforma = $plataformaDatos->id;
 
-            if ($nombrePlataforma === "club bohn") {
-                $canje = DB::connection('mysql_club_bohn')
-                    ->table('swaps_view')
-                    ->where('id', $request->id_canje)
-                    ->first();
-            } else {
-                $canje = DB::table('swaps_view')
-                    ->where('id', $request->id_canje)
-                    ->first();
+            $actualizadas = ValidacionCanje::where('id_canje', $request->id_canje)
+                ->where('estatus', '!=', 'identidad_validada')
+                ->update([
+                    'estatus' => 'identidad_validada',
+                    'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
+                ]);
+            if ($actualizadas === 0) {
+                return $this->sendResponse(0, 'El canje ya estaba validado');
             }
 
-            $validado = true;
+            $canje = $this->obtenerCanje($request->id_canje, $nombrePlataforma === 'club bohn');
 
-            if ($validacion) {
-                $this->enviarWhatsApp($canje, null, $validado, null, $idPlataforma);
-                $this->enviarCorreo($canje, null, $validado, null, $idPlataforma);
+            if ($canje) {
+                $this->enviarWhatsApp($canje, null, true, null, $idPlataforma);
+                $this->enviarCorreo($canje, null, true, null, $idPlataforma);
             }
 
-            return $this->sendResponse($validacion, 'Canje validado correctamente');
+            return $this->sendResponse($actualizadas, 'Canje validado correctamente');
         } catch (\Throwable $th) {
             return $this->sendError('Error al validar el canje', $th->getMessage(), 500);
         }
@@ -634,48 +638,26 @@ class CanjesController extends BaseController
 
             $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
             if (!$plataformaModel) {
+                DB::rollBack();
                 return $this->sendError('La plataforma no existe', null, 404);
             }
             $id_plataforma = $plataformaModel->id;
-            $validacionDatos = ValidacionCanje::where('id_canje', $request->id)->first();
 
             $user = Auth::user();
-            if (!$validacionDatos) {
-                $validacion = ValidacionCanje::create([
-                    'id_canje' => $request->id,
-                    'id_producto' => $request->id_producto,
-                    'cantidad_producto' => $request->number_of_awards,
-                    'id_proveedor' => $request->id_proveedor,
-                    'id_usuario_admin' => $user->id,
-                    'id_plataforma' => $id_plataforma,
-                    'estatus' => 'identidad_validada',
-                    'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
-                ]);
-            } else {
-                $validacion = ValidacionCanje::where('id_canje', $request->id)
-                    ->update([
-                        'estatus' => "identidad_validada",
-                        'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
-                    ]);
+            $this->registrarProductos($request, $user->id, $id_plataforma);
+
+            ValidacionCanje::where('id_canje', $request->id)->update([
+                'estatus' => 'identidad_validada',
+                'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
+            ]);
+
+            $canje = $this->obtenerCanje($request->id, $request->plataforma === 'club_bohn');
+
+            if ($canje) {
+                $this->enviarWhatsApp($canje, null, true, null, $id_plataforma);
+                $this->enviarCorreo($canje, null, true, null, $id_plataforma);
             }
 
-            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
-                $canje = DB::connection('mysql_club_bohn')
-                    ->table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            } else {
-                $canje = DB::table('swaps_view')
-                    ->where('id', $request->id)
-                    ->first();
-            }
-
-            $validado = true;
-
-            if ($validacion) {
-                $this->enviarWhatsApp($canje, null, $validado, null, $id_plataforma);
-                $this->enviarCorreo($canje, null, $validado, null);
-            }
             $log['evento'] = 'Canje validado directamente';
             $log['descripcion'] = "El usuario con id: {$user->id} validó el canje: {$canje->folio} sin proveedor";
             $log['id_usuario'] = $user->id;
@@ -711,6 +693,10 @@ class CanjesController extends BaseController
 
             $urlva = config('app.url_frontend') . "/validar-canje/{$canjeIdEncriptado}/{$idPlataforma}";
 
+            $listaPremios = collect($canje->productos)
+                ->map(fn($p) => "• {$p->nombre} (x{$p->cantidad})")
+                ->implode("\n");
+
             if ($codigo) {
                 $titulo = "🔐 Código de verificación de identidad 🔐";
                 $mensaje = "Ha solicitado un código para verificar su identidad, ingresa a la web y coloca el siguiente código para verificarte:\n\n" .
@@ -721,11 +707,11 @@ class CanjesController extends BaseController
                 $this->whatsappService->sendMessage($canje->phone, $mensaje);
             } else if ($validado) {
                 $titulo = "✅ Identidad validada correctamente ✅";
-                $mensaje = "Se ha validado la identidad de un canje por parte de un cliente, los datos validados corresponden a:\n\n" .
+                $mensaje = "Se ha validado la identidad de un canje, los datos validados corresponden a:\n\n" .
                     "👤 Cliente: {$canje->name}\n" .
                     "📧 Correo: {$canje->email}\n" .
                     "📱 Teléfono: {$canje->phone}\n" .
-                    "🎁 Premio: {$canje->desc}\n" .
+                    "🎁 Premios:\n{$listaPremios}\n" .
                     "📄 Folio: {$canje->folio}\n" .
                     "💻 Plataforma: {$nombrePlataforma}\n";
 
@@ -739,7 +725,7 @@ class CanjesController extends BaseController
                     "👤 Cliente: {$canje->name}\n" .
                     "📧 Correo: {$canje->email}\n" .
                     "📱 Teléfono: {$canje->phone}\n" .
-                    "🎁 Premio: {$canje->desc}\n" .
+                    "🎁 Premios:\n{$listaPremios}\n" .
                     "📄 Folio: {$canje->folio}\n" .
                     "🔗 Link para validación:\n{$urlva}\n\n" .
                     "💻 Plataforma: {$nombrePlataforma}\n" .
@@ -773,8 +759,9 @@ class CanjesController extends BaseController
                 'nombre_usuario' => $canje->name,
                 'email' => $canje->email,
                 'phone' => $canje->phone,
-                'nombre_premio' => $canje->desc,
-                'puntos_canjeados' => $canje->points_swap,
+                'nombre_premio' => $canje->premios,
+                'puntos_canjeados' => $canje->puntos_total,
+                'productos' => $canje->productos,
                 'calle' => $canje->street,
                 'numero_calle' => $canje->number,
                 'colonia' => $canje->colony,

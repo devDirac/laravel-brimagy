@@ -21,9 +21,7 @@ class AlmacenController extends BaseController
     public function getProductosAlmacen(Request $request)
     {
         try {
-
             $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
-            // es club bohn
             $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
             if (!$plataformaModel) {
                 return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
@@ -42,15 +40,17 @@ class AlmacenController extends BaseController
                     'cdp.nombre_producto',
                     'cdp.marca',
                     'cdp.sku',
+                    'ra.id_proveedor',
                     'cp.nombre as nombre_proveedor',
                     'ra.id_orden_compra',
                     'oc.no_orden',
                     'ra.cantidad_producto',
                     DB::raw('(
-            SELECT SUM(ra2.cantidad_almacen)
-            FROM dc_recepcion_almacen ra2
-            WHERE ra2.id_canje = ra.id_canje
-        ) as cantidad_almacen'),
+                    SELECT COALESCE(SUM(ra2.cantidad_almacen), 0)
+                    FROM dc_recepcion_almacen ra2
+                    WHERE ra2.id_canje = ra.id_canje
+                      AND ra2.id_producto = ra.id_producto
+                ) as cantidad_almacen'),
                     'ra.fecha_compra',
                     'ra.costo_envio_real',
                     'ra.comentarios',
@@ -73,23 +73,31 @@ class AlmacenController extends BaseController
                 ) as tiene_factura')
                 )
                 ->leftJoin('dc_catalogo_productos as cdp', 'ra.id_producto', '=', 'cdp.id')
-                ->leftJoin('dc_catalogo_proveedores as cp', 'cdp.id_proveedor', '=', 'cp.id')
+                ->leftJoin(
+                    'dc_catalogo_proveedores as cp',
+                    'cp.id',
+                    '=',
+                    DB::raw('COALESCE(ra.id_proveedor, cdp.id_proveedor)')
+                )
                 ->leftJoin('dc_orden_compra as oc', 'ra.id_orden_compra', '=', 'oc.id')
                 ->leftJoin('users as u', 'ra.id_usuario', '=', 'u.id')
                 ->whereIn('ra.id', function ($sub) {
                     $sub->selectRaw('MIN(id)')
                         ->from('dc_recepcion_almacen')
                         ->whereNotNull('id_canje')
-                        ->groupBy('id_canje');
+                        ->groupBy('id_canje', 'id_producto');
                 })
-                ->whereNot('ra.estatus', 'entregado')
+                ->where(function ($q) {
+                    $q->whereNull('ra.estatus')
+                        ->orWhere('ra.estatus', '!=', 'entregado');
+                })
                 ->where('cdp.id_plataforma', $id_plataforma);
 
             $productosAlmacen = $query->orderBy('ra.created_at', 'desc')->get();
 
             return $this->sendResponse($productosAlmacen);
         } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los productos en almacen', $th, 500);
+            return $this->sendError('Error al obtener los productos en almacen', $th->getMessage(), 500);
         }
     }
     public function getProductoAlmacenPorId(Request $request)
@@ -97,12 +105,19 @@ class AlmacenController extends BaseController
         DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
-                'id_canje' => 'required|string'
+                'id_producto_almacen' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
-                DB::rollBack();
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            // Registro sobre el que se hizo clic
+            $registro = DB::table('dc_recepcion_almacen')
+                ->where('id', $request->id_producto_almacen)
+                ->first();
+            if (!$registro) {
+                return $this->sendError('Producto de almacén no encontrado', null, 404);
             }
 
             $productos = DB::table('dc_recepcion_almacen as ra')
@@ -148,7 +163,8 @@ class AlmacenController extends BaseController
                 ->leftJoin('dc_orden_compra as oc', 'ra.id_orden_compra', '=', 'oc.id')
                 ->leftJoin('dc_usuarios_plataforma as up', 'ra.id_usuario', '=', 'up.id')
                 ->leftJoin('dc_evidencias_almacen as ea', 'ea.id_almacen_producto', '=', 'ra.id')
-                ->where('ra.id_canje', $request->id_canje)
+                ->where('ra.id_canje', $registro->id_canje)
+                ->where('ra.id_producto', $registro->id_producto)
                 ->get();
 
             $base = $productos->sortBy('id_producto_almacen')->first();
@@ -213,7 +229,7 @@ class AlmacenController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'id_producto_almacen' => 'required|integer',
-                'cantidad_producto' => 'required|integer',
+                'cantidad_producto' => 'required|integer|min:1',
             ]);
 
             if ($validator->fails()) {
@@ -221,18 +237,21 @@ class AlmacenController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $producto_almacen = RecepcionAlmacen::find($request->id_producto_almacen);
+            $producto_almacen = RecepcionAlmacen::lockForUpdate()->find($request->id_producto_almacen);
 
             if (!$producto_almacen) {
                 DB::rollBack();
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            $cantidadAlmacenActual = RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
-                ->sum('cantidad_almacen');
+            // Registros de ESTE producto dentro del canje
+            // (el original + los creados al recibir con nuevo precio)
+            $registrosDelProducto = fn() => RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
+                ->where('id_producto', $producto_almacen->id_producto);
 
-            $nuevaCantidadAlmacen = $cantidadAlmacenActual + $request->cantidad_producto;
-            $cantidadTotal = $producto_almacen->cantidad_producto;
+            $cantidadAlmacenActual = (int) $registrosDelProducto()->sum('cantidad_almacen');
+            $nuevaCantidadAlmacen = $cantidadAlmacenActual + (int) $request->cantidad_producto;
+            $cantidadTotal = (int) $producto_almacen->cantidad_producto;
 
             if ($nuevaCantidadAlmacen > $cantidadTotal) {
                 DB::rollBack();
@@ -242,54 +261,51 @@ class AlmacenController extends BaseController
                         'cantidad_pendiente' => $cantidadTotal - $cantidadAlmacenActual,
                         'cantidad_recibida' => $cantidadAlmacenActual,
                         'cantidad_total' => $cantidadTotal,
-                        'nuevaCantidadAlmacen' => $nuevaCantidadAlmacen
+                        'nuevaCantidadAlmacen' => $nuevaCantidadAlmacen,
                     ],
                     400
                 );
             }
 
             $user = Auth::user();
-            // Determinar el estatus según las cantidades
             $estatus = $nuevaCantidadAlmacen >= $cantidadTotal
                 ? 'en_almacen'
                 : 'en_almacen_parcialmente';
 
+            $producto_catalogo = CatalogoProductos::find($producto_almacen->id_producto);
+
             if (!$request->filled('precio_compra')) {
                 $producto_almacen->update([
                     'id_proveedor' => $request->id_proveedor,
-                    'cantidad_almacen' => $request->cantidad_producto,
+                    // se suma a lo ya recibido en este registro
+                    'cantidad_almacen' => (int) $producto_almacen->cantidad_almacen + (int) $request->cantidad_producto,
                     'imei' => $request->imei,
                     'no_serie' => $request->no_serie,
                     'folio_factura' => $request->folio_factura,
                     'comentarios' => $request->comentarios,
-                    'precio_compra' => $producto_almacen->costo_con_iva,
+                    'precio_compra' => $producto_almacen->precio_compra ?? $producto_catalogo?->costo_con_iva,
                     'fecha_compra' => $request->fecha_compra,
-                    'estatus' => $estatus,
                 ]);
 
-                $producto_catalogo = CatalogoProductos::find($request->id_producto);
-
-                $producto_catalogo->update([
+                $producto_catalogo?->update([
                     'id_proveedor' => $request->id_proveedor,
                 ]);
 
                 $log = [
                     'evento' => 'Recepción de producto en almacén',
-                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto_almacen->id_producto}.",
+                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto_almacen->id_producto} del canje {$producto_almacen->id_canje}.",
                     'id_usuario' => $user->id,
                 ];
             } else {
-
-                $producto_almacen_nuevo = RecepcionAlmacen::create([
-                    //datos que deben duplicarse
+                RecepcionAlmacen::create([
+                    // datos que deben duplicarse
                     'id_canje' => $producto_almacen->id_canje,
                     'id_usuario' => $producto_almacen->id_usuario,
                     'id_producto' => $producto_almacen->id_producto,
                     'cantidad_producto' => $producto_almacen->cantidad_producto,
                     'id_orden_compra' => $producto_almacen->id_orden_compra,
                     'fecha' => $producto_almacen->fecha,
-                    'estatus' => $estatus,
-                    //nuevos datos a insertar
+                    // nuevos datos
                     'id_producto_nuevo' => $producto_almacen->id_producto,
                     'precio_compra' => $request->precio_compra,
                     'fecha_compra' => $request->fecha_compra,
@@ -301,9 +317,7 @@ class AlmacenController extends BaseController
                     'comentarios' => $request->comentarios,
                 ]);
 
-                $producto_catalogo = CatalogoProductos::find($request->id_producto);
-
-                $producto_catalogo->update([
+                $producto_catalogo?->update([
                     'costo_con_iva' => $request->precio_compra,
                     'costo_sin_iva' => $request->precio_compra / 1.16,
                     'id_proveedor' => $request->id_proveedor,
@@ -311,14 +325,13 @@ class AlmacenController extends BaseController
 
                 $log = [
                     'evento' => 'Recepción de producto en almacén con nuevo precio',
-                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto_almacen->id_producto} con un nuevo precio de {$request->precio_compra}.",
+                    'descripcion' => "El usuario con id: {$user->id} recibió {$request->cantidad_producto} unidades del producto {$producto_almacen->id_producto} del canje {$producto_almacen->id_canje} con un nuevo precio de {$request->precio_compra}.",
                     'id_usuario' => $user->id,
                 ];
             }
 
-            // Actualizar todos los registros con el mismo id_canje
-            RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
-                ->update(['estatus' => $estatus]);
+            // Solo se actualiza el estatus de ESTE producto, no de todo el canje
+            $registrosDelProducto()->update(['estatus' => $estatus]);
 
             BitacoraEventos::create($log);
 
@@ -326,7 +339,7 @@ class AlmacenController extends BaseController
             return $this->sendResponse([
                 'producto' => $producto_almacen->fresh(),
                 'estatus' => $estatus,
-                'cantidad_recibida' => $request->cantidad_producto,
+                'cantidad_recibida' => (int) $request->cantidad_producto,
                 'cantidadAlmacenActual' => $nuevaCantidadAlmacen,
                 'cantidad_total' => $cantidadTotal,
                 'cantidad_pendiente' => $cantidadTotal - $nuevaCantidadAlmacen,
@@ -480,7 +493,7 @@ class AlmacenController extends BaseController
         DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
-                'id_canje' => 'required|integer',
+                'id_producto_almacen' => 'required|integer',
                 'guia_producto' => 'required|string',
             ]);
 
@@ -489,14 +502,16 @@ class AlmacenController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $existe = RecepcionAlmacen::where('id_canje', $request->id_canje)->exists();
+            $producto_almacen = RecepcionAlmacen::find($request->id_producto_almacen);
 
-            if (!$existe) {
+            if (!$producto_almacen) {
                 DB::rollBack();
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            RecepcionAlmacen::where('id_canje', $request->id_canje)
+            // Solo los registros de ESTE producto dentro del canje
+            RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
+                ->where('id_producto', $producto_almacen->id_producto)
                 ->update([
                     'guia' => $request->guia_producto,
                     'estatus' => 'guia_asignada',
@@ -505,7 +520,7 @@ class AlmacenController extends BaseController
             $user = Auth::user();
             BitacoraEventos::create([
                 'evento' => 'Se añadió una guía a un producto en almacen',
-                'descripcion' => "El usuario con id: {$user->id} añadió la guía {$request->guia_producto} al canje {$request->id_canje} en almacén",
+                'descripcion' => "El usuario con id: {$user->id} añadió la guía {$request->guia_producto} al producto {$producto_almacen->id_producto} del canje {$producto_almacen->id_canje} en almacén",
                 'id_usuario' => $user->id,
             ]);
 
@@ -536,17 +551,17 @@ class AlmacenController extends BaseController
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            // Actualizar todos los registros
-            RecepcionAlmacen::where('id_orden_compra', $producto_almacen->id_orden_compra)
-                ->update(['estatus' => "enviado"]);
+            // Solo los registros de ESTE producto dentro del canje
+            RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
+                ->where('id_producto', $producto_almacen->id_producto)
+                ->update(['estatus' => 'enviado']);
 
             $user = Auth::user();
-            $log = [
+            BitacoraEventos::create([
                 'evento' => 'Se envió un producto de almacén',
-                'descripcion' => "El usuario con id: {$user->id} envió el producto {$producto_almacen->id_producto}",
+                'descripcion' => "El usuario con id: {$user->id} envió el producto {$producto_almacen->id_producto} del canje {$producto_almacen->id_canje}",
                 'id_usuario' => $user->id,
-            ];
-            BitacoraEventos::create($log);
+            ]);
 
             DB::commit();
             return $this->sendResponse('Producto enviado correctamente.');
@@ -561,7 +576,7 @@ class AlmacenController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'id_producto_almacen' => 'required|integer',
-                'costo_envio_real' => 'required|integer',
+                'costo_envio_real' => 'required|numeric',
             ]);
 
             if ($validator->fails()) {
@@ -576,21 +591,18 @@ class AlmacenController extends BaseController
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            // Actualizar todos los registros
-            RecepcionAlmacen::where('id_orden_compra', $producto_almacen->id_orden_compra)
-                ->update(['estatus' => "entregado", 'costo_envio_real' => $request->costo_envio_real]);
+            // Solo los registros de ESTE producto dentro del canje
+            RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
+                ->where('id_producto', $producto_almacen->id_producto)
+                ->update([
+                    'estatus' => 'entregado',
+                    'costo_envio_real' => $request->costo_envio_real,
+                ]);
 
             $user = Auth::user();
-            $log = [
-                'evento' => 'Se confirmó recepción de un producto en almacen',
-                'descripcion' => "El usuario con id: {$user->id} confirmó recepción del producto {$producto_almacen->id_producto}",
-                'id_usuario' => $user->id,
-            ];
-            BitacoraEventos::create($log);
-
             BitacoraEventos::create([
-                'evento' => 'Se añadió el costo de envio real',
-                'descripcion' => "El usuario con id: {$user->id} añadió el costo de envío real: {$request->costo_envio_real} al canje {$request->id_canje} en almacén",
+                'evento' => 'Se confirmó recepción de un producto en almacen',
+                'descripcion' => "El usuario con id: {$user->id} confirmó la entrega del producto {$producto_almacen->id_producto} del canje {$producto_almacen->id_canje} con costo de envío real: {$request->costo_envio_real}",
                 'id_usuario' => $user->id,
             ]);
 
