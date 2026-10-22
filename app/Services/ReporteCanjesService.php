@@ -22,6 +22,22 @@ class ReporteCanjesService
         return $this->reporteGeneral($request, $plataforma);
     }
 
+    private function resumenAlmacenQuery()
+    {
+        return DB::table('dc_recepcion_almacen')
+            ->select(
+                'id_canje',
+                'id_producto',
+                DB::raw('MAX(fecha_compra) as fecha_compra'),
+                DB::raw("GROUP_CONCAT(DISTINCT NULLIF(folio_factura, '')) as folio_factura"),
+                DB::raw("GROUP_CONCAT(DISTINCT NULLIF(imei, '')) as imei"),
+                DB::raw('COALESCE(SUM(precio_compra * cantidad_almacen) / NULLIF(SUM(cantidad_almacen), 0), MAX(precio_compra)) as precio_compra'),
+                DB::raw('MAX(costo_envio_real) as costo_envio_real')
+            )
+            ->whereNotNull('id_canje')
+            ->groupBy('id_canje', 'id_producto');
+    }
+
     private function reporteGeneral(Request $request, string $plataforma): array
     {
         $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
@@ -81,12 +97,15 @@ class ReporteCanjesService
                 DB::raw("((cdp.costo_sin_iva - COALESCE((ra.precio_compra / 1.16), 0)) + ((cdp.costo_sin_iva - (ra.precio_compra / 1.16)) * (COALESCE(cdp.fee_brimagy, 0) / 100.0)) + (cdp.envio_base - ra.costo_envio_real)) as total_diferencia_puntos_proveedor"),
             )
             ->leftJoin('dc_catalogo_productos as cdp', 'sv.award_id', '=', 'cdp.id_producto_brimagy')
-            ->leftJoin('dc_recepcion_almacen as ra', 'ra.id_canje', '=', 'sv.id')
+            ->leftJoinSub($this->resumenAlmacenQuery(), 'ra', function ($join) {
+                $join->on('ra.id_canje', '=', 'sv.id')
+                    ->on('ra.id_producto', '=', 'cdp.id');
+            })
             ->where('cdp.id_plataforma', $id_plataforma);
 
         $this->aplicarFiltroFechas($query, $request, 'sv.created_at');
 
-        $reporte = $query->orderBy('ra.created_at', 'desc')->get();
+        $reporte = $query->orderBy('sv.created_at', 'desc')->get();
 
         $periodoActual = Periodo::where('id_plataforma', $id_plataforma)->where('activo', 1)->first();
 
@@ -170,6 +189,7 @@ class ReporteCanjesService
             ->where('cdp.id_plataforma', $id_plataforma)
             ->whereIn('cdp.id_producto_brimagy', $awardIds)
             ->select(
+                'cdp.id',
                 'cdp.id_producto_brimagy',
                 'cdp.nombre_producto as premio',
                 'cdp.sku',
@@ -184,24 +204,17 @@ class ReporteCanjesService
 
         $swapIds = $swaps->pluck('id')->unique()->values();
 
-        $recepciones = DB::table('dc_recepcion_almacen as ra')
-            ->whereIn('ra.id_canje', $swapIds)
-            ->select(
-                'ra.id_canje',
-                'ra.fecha_compra',
-                'ra.folio_factura',
-                'ra.imei',
-                'ra.precio_compra',
-                'ra.costo_envio_real'
-            )
+        // Una fila por canje
+        $recepciones = $this->resumenAlmacenQuery()
+            ->whereIn('id_canje', $swapIds)
             ->get()
-            ->keyBy('id_canje');
+            ->keyBy(fn($r) => $r->id_canje . '-' . $r->id_producto);
 
         $periodoActual = Periodo::where('id_plataforma', $id_plataforma)->where('activo', 1)->first();
 
         $reporte = $swaps->map(function ($swap) use ($catalogo, $recepciones, $periodoActual) {
             $producto = $catalogo->get($swap->award_id);
-            $recepcion = $recepciones->get($swap->id);
+            $recepcion = $producto ? $recepciones->get($swap->id . '-' . $producto->id) : null;
 
             $fechaCanje = $swap->fecha_canje;
 
@@ -215,7 +228,6 @@ class ReporteCanjesService
                     $semanaPeriodo = "Fuera del periodo";
                 }
             }
-
 
             $costo_puntos_sin_iva = $producto->precio_sin_iva_puntos_prespuestado ?? null;
             $costo_sin_iva = $producto->precio_sin_iva_proveedor_prespuestado ?? null;
@@ -254,7 +266,6 @@ class ReporteCanjesService
                 ? $diferencia_precio_usuario + $diferencia_precio_usuario_2 + $diferencia_envio : null;
             $total_diferencia_puntos_proveedor = ($diferencia_precio_proveedor !== null && $diferencia_precio_proveedor_2 !== null && $diferencia_envio !== null)
                 ? $diferencia_precio_proveedor + $diferencia_precio_proveedor_2 + $diferencia_envio : null;
-
 
             return (object) array_merge((array) $swap, [
                 'premio' => $producto->premio ?? null,

@@ -15,14 +15,12 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
 use App\Models\CatalogoProveedores;
-use App\Models\CategoriaBrimagy;
 use App\Models\CategoriaClub;
 use App\Models\Facturas;
 use App\Models\Notificaciones;
 use App\Models\OrdenCompra;
 use App\Models\Plataformas;
 use App\Models\RecepcionAlmacen;
-use App\Models\SubCategoriaBrimagy;
 use App\Models\SubCategoriaClub;
 use App\Models\UsuariosPlataforma;
 use App\Models\ValidacionCanje;
@@ -64,7 +62,7 @@ class OrdenCompraController extends BaseController
         try {
             $validator = Validator::make($request->all(), [
                 'id_canje' => 'required|integer',
-                'id_usuario' => 'required|integer|exists:users,id',
+                'id_usuario' => 'required|integer|exists:dc_usuarios_plataforma,id',
                 'id_proveedor' => 'required|integer|exists:dc_catalogo_proveedores,id'
             ]);
 
@@ -501,7 +499,7 @@ class OrdenCompraController extends BaseController
 
         try {
             $validator = Validator::make($request->all(), [
-                'id_usuario' => 'required|integer|exists:users,id',
+                'id_usuario' => 'required|integer|exists:dc_usuarios_plataforma,id',
                 'id_proveedor' => 'nullable|integer',
                 'productos' => 'required|array',
                 'productos.*.id_canje' => 'required|integer',
@@ -962,98 +960,57 @@ class OrdenCompraController extends BaseController
     }
     public function aceptarProductoOC(Request $request)
     {
-        DB::beginTransaction();
-
-        try {
-            $validator = Validator::make($request->all(), [
-                'id_producto' => 'required|integer',
-            ]);
-
-            if ($validator->fails()) {
-                DB::rollBack();
-                return $this->sendError('El formato de datos no es válido.', $validator->errors());
-            }
-
-            $idProducto = $request->id_producto;
-
-            // Buscar la orden que contiene este id_producto usando JSON_CONTAINS
-            $ordenCompra = OrdenCompra::whereRaw(
-                "JSON_CONTAINS_PATH(productos_canje, 'one', ?)",
-                ['$."' . $idProducto . '"']
-            )->first();
-
-            if (!$ordenCompra) {
-                DB::rollBack();
-                return $this->sendError('No se encontró una orden de compra con este producto.', null, 404);
-            }
-
-            // Decodificar el JSON de productos (ahora es un objeto)
-            $productosCanje = json_decode($ordenCompra->productos_canje, true);
-
-            if (!$productosCanje || !is_array($productosCanje)) {
-                DB::rollBack();
-                return $this->sendError('Error al procesar los productos de la orden.', null, 500);
-            }
-
-            // Verificar que el producto existe
-            if (!isset($productosCanje[$idProducto])) {
-                DB::rollBack();
-                return $this->sendError('No se encontró el producto en la orden de compra.', null, 404);
-            }
-
-            // Actualizar el estatus del proveedor directamente usando la clave
-            $productosCanje[$idProducto]['estatus_proveedor'] = 1;
-
-            // Guardar el objeto actualizado
-            $ordenCompra->productos_canje = json_encode($productosCanje, JSON_FORCE_OBJECT);
-            $ordenCompra->save();
-
-            DB::commit();
-
-            return $this->sendResponse([
-                'orden_compra' => $ordenCompra,
-                'producto_actualizado' => $productosCanje[$idProducto]
-            ], 'Producto aceptado exitosamente.');
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return $this->sendError('Error al aceptar el producto', $th->getMessage(), 500);
-        }
+        return $this->cambiarEstatusProductoOC($request, 1, 'aceptado');
     }
+
     public function rechazarProductoOC(Request $request)
     {
+        return $this->cambiarEstatusProductoOC($request, 2, 'rechazado');
+    }
+    private function cambiarEstatusProductoOC(Request $request, int $nuevoEstatus, string $accion)
+    {
+        $validator = Validator::make($request->all(), [
+            'id_orden_compra' => 'required|integer',
+            'id_producto'     => 'required|integer',
+            'motivo'          => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('El formato de datos no es válido.', $validator->errors());
+        }
+
         DB::beginTransaction();
 
         try {
-            $validator = Validator::make($request->all(), [
-                'id_producto' => 'required|integer',
-            ]);
+            $idProducto = (string) $request->id_producto;
 
-            if ($validator->fails()) {
-                DB::rollBack();
-                return $this->sendError('El formato de datos no es válido.', $validator->errors());
-            }
-
-            $idProducto = $request->id_producto;
-
-            $ordenCompra = OrdenCompra::whereRaw(
-                "JSON_CONTAINS_PATH(productos_canje, 'one', ?)",
-                ['$."' . $idProducto . '"']
-            )->first();
+            // Buscar la orden exacta y bloquearla para evitar sobrescrituras
+            $ordenCompra = OrdenCompra::where('id', $request->id_orden_compra)
+                ->lockForUpdate()
+                ->first();
 
             if (!$ordenCompra) {
                 DB::rollBack();
-                return $this->sendError('No se encontró una orden de compra con este producto.', null, 404);
+                return $this->sendError('La orden de compra no existe.', null, 404);
+            }
+
+            if ($ordenCompra->estatus === 'orden_compra_enviada_a_proveedor') {
+                DB::rollBack();
+                return $this->sendError('La orden ya fue enviada al proveedor, no se puede modificar.', null, 409);
             }
 
             $productosCanje = json_decode($ordenCompra->productos_canje, true);
 
-            if (!isset($productosCanje[$idProducto])) {
+            if (!is_array($productosCanje) || !isset($productosCanje[$idProducto])) {
                 DB::rollBack();
-                return $this->sendError('No se encontró el producto en la orden de compra.', null, 404);
+                return $this->sendError('No se encontró el producto en esta orden de compra.', null, 404);
             }
 
-            // Actualizar estatus y agregar motivo de rechazo
-            $productosCanje[$idProducto]['estatus_proveedor'] = 2;
+            $productosCanje[$idProducto]['estatus_proveedor'] = $nuevoEstatus;
+
+            if ($nuevoEstatus === 2) {
+                $productosCanje[$idProducto]['motivo_rechazo'] = $request->motivo ?? '';
+            }
 
             $ordenCompra->productos_canje = json_encode($productosCanje, JSON_FORCE_OBJECT);
             $ordenCompra->save();
@@ -1061,12 +1018,12 @@ class OrdenCompraController extends BaseController
             DB::commit();
 
             return $this->sendResponse([
-                'orden_compra' => $ordenCompra,
-                'producto_actualizado' => $productosCanje[$idProducto]
-            ], 'Producto rechazado exitosamente.');
+                'orden_compra'         => $ordenCompra,
+                'producto_actualizado' => $productosCanje[$idProducto],
+            ], "Producto {$accion} exitosamente.");
         } catch (\Throwable $th) {
             DB::rollBack();
-            return $this->sendError('Error al rechazar el producto', $th->getMessage(), 500);
+            return $this->sendError("Error al marcar el producto como {$accion}", $th->getMessage(), 500);
         }
     }
     public function enviarOCAprobacion(Request $request)
@@ -1217,8 +1174,6 @@ class OrdenCompraController extends BaseController
                 $this->enviarWhatsApp($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
                 $this->enviarCorreo($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
             }
-            //$this->enviarWhatsApp($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
-            //$this->enviarCorreo($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
 
             DB::commit();
 
@@ -1231,11 +1186,6 @@ class OrdenCompraController extends BaseController
             return $this->sendResponse($orden_compra);
         } catch (\Throwable $th) {
             DB::rollBack();
-            /*return response()->json([
-                'success' => false,
-                'message' => 'Error al subir las fotos',
-                'error' => $th->getMessage()
-            ], 500);*/
             return $this->sendError('Error al enviar la orden de compra a proveedor', $th->getMessage(), 500);
         }
     }

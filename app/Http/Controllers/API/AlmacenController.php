@@ -208,6 +208,7 @@ class AlmacenController extends BaseController
                         'sku_nuevo' => $p->sku_nuevo ?? $p->sku,
                         'precio_compra' => $p->precio_compra ?? $p->costo_con_iva,
                         'cantidad_almacen' => $p->cantidad_almacen,
+                        'fecha_compra' => $p->fecha_compra,
                         'imei' => $p->imei,
                         'costo_envio_real' => $base->costo_envio_real,
                         'fecha_pago' => $base->fecha_pago,
