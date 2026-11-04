@@ -29,6 +29,7 @@ class OrdenCompraService
 
         $validaciones = ValidacionCanje::whereIn('id', $lineas->keys())
             ->where(fn($q) => $q->whereNull('no_orden')->orWhere('no_orden', ''))
+            ->whereNull('orden_ejecutada')
             ->get();
 
         if ($validaciones->isEmpty()) {

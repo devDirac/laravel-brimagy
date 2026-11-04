@@ -116,6 +116,9 @@ Route::post('rechazarProductoOC', [OrdenCompraController::class, 'rechazarProduc
 Route::put('enviarOCAprobacion', [OrdenCompraController::class, 'enviarOCAprobacion']);
 Route::put('enviarOrdenCompraFileProveedor', [OrdenCompraController::class, 'enviarOrdenCompraFileProveedor'])->middleware($SANCTUM);
 Route::put('rechazarCotizacionDeProveedor', [OrdenCompraController::class, 'rechazarCotizacionDeProveedor'])->middleware($SANCTUM);
+//COTIZAR EN CUALQUIER MOMENTO
+Route::post('cotizarConOtrosProveedores', [OrdenCompraController::class, 'cotizarConOtrosProveedores'])->middleware($SANCTUM);
+Route::get('getConfigCotizacion', [OrdenCompraController::class, 'getConfigCotizacion'])->middleware($SANCTUM);
 
 //FACTURAS XML Y PDF
 Route::post('validarFacturaOrdenCompra', [OrdenCompraController::class, 'validarFacturaOrdenCompra']);

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Contracts\EstrategiaCotizacionMultiple;
+use App\Http\Requests\CotizarOtrosProveedoresRequest;
 use App\Models\Categoria;
 use App\Models\SubCategoria;
 use Illuminate\Support\Facades\Auth;
@@ -28,9 +30,11 @@ use App\Repositories\CanjesPendientesRepository;
 use App\Services\FolioCanjeResolver;
 use App\Services\OrdenCompraService;
 use App\Services\WhatsAppService;
+use App\Services\CierreCanjesService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+
 
 class OrdenCompraController extends BaseController
 {
@@ -81,7 +85,7 @@ class OrdenCompraController extends BaseController
 
         $validaciones = DB::table('dc_validacion_canje')
             ->whereIn('id', $lineas->pluck('id_validacion')->filter()->unique())
-            ->get(['id', 'estatus', 'fecha_validacion'])
+            ->get(['id', 'estatus', 'fecha_validacion', 'orden_ejecutada'])
             ->keyBy('id');
 
         return $lineas
@@ -95,11 +99,38 @@ class OrdenCompraController extends BaseController
 
                 return array_merge((array) $producto, [
                     'estado_validacion' => $vc->estatus ?? null,
-                    'fecha_validacion'  => $vc->fecha_validacion ?? null,
+                    'fecha_validacion' => $vc->fecha_validacion ?? null,
+                    'orden_ejecutada' => $vc->orden_ejecutada ?? null,
                 ], $linea);
             })
             ->filter()
             ->values();
+    }
+    public function cotizarConOtrosProveedores(
+        CotizarOtrosProveedoresRequest $request,
+        EstrategiaCotizacionMultiple $estrategia
+    ) {
+        try {
+            $resultado = $estrategia->ejecutar($request->asignacionesNormalizadas(), Auth::id());
+
+            BitacoraEventos::create([
+                'evento' => 'Cotización con otros proveedores',
+                'descripcion' => 'El usuario con id: ' . Auth::id() . " ({$resultado->modo}): {$resultado->mensaje}",
+                'id_usuario' => Auth::id(),
+            ]);
+
+            return $this->sendResponse($resultado->toArray(), $resultado->mensaje);
+        } catch (\DomainException $e) {
+            return $this->sendError($e->getMessage(), null, 422);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al cotizar con otros proveedores', $th->getMessage(), 500);
+        }
+    }
+    public function getConfigCotizacion()
+    {
+        return $this->sendResponse([
+            'modo' => config('ordenes_compra.cotizacion_multiple.modo'),
+        ]);
     }
     public function crearOrdenCompra(Request $request)
     {
@@ -289,33 +320,33 @@ class OrdenCompraController extends BaseController
 
             $respuesta = [
                 'orden_compra' => [
-                    'id'              => $ordenCompra->id,
-                    'no_orden'        => $ordenCompra->no_orden,
-                    'estatus'         => $ordenCompra->estatus,
-                    'observaciones'   => $ordenCompra->observaciones,
-                    'created_at'      => $ordenCompra->created_at,
-                    'updated_at'      => $ordenCompra->updated_at,
-                    'id_usuario'      => $ordenCompra->id_usuario,
+                    'id' => $ordenCompra->id,
+                    'no_orden' => $ordenCompra->no_orden,
+                    'estatus' => $ordenCompra->estatus,
+                    'observaciones' => $ordenCompra->observaciones,
+                    'created_at' => $ordenCompra->created_at,
+                    'updated_at' => $ordenCompra->updated_at,
+                    'id_usuario' => $ordenCompra->id_usuario,
                     'nombre_vendedor' => $ordenCompra->nombre_vendedor,
                 ],
                 'proveedor' => [
-                    'id'              => $ordenCompra->id_proveedor,
-                    'nombre'          => $ordenCompra->nombre_proveedor,
-                    'razon_social'    => $ordenCompra->razon_social,
-                    'descripcion'     => $ordenCompra->descripcion_proveedor,
+                    'id' => $ordenCompra->id_proveedor,
+                    'nombre' => $ordenCompra->nombre_proveedor,
+                    'razon_social' => $ordenCompra->razon_social,
+                    'descripcion' => $ordenCompra->descripcion_proveedor,
                     'nombre_contacto' => $ordenCompra->nombre_contacto,
-                    'telefono'        => $ordenCompra->telefono,
-                    'correo'          => $ordenCompra->correo,
+                    'telefono' => $ordenCompra->telefono,
+                    'correo' => $ordenCompra->correo,
                 ],
                 'productos' => $productosCombinados,
                 'totales' => [
                     'subtotal' => $aceptados->sum('subtotal'),
-                    'iva'      => $aceptados->sum('iva'),
-                    'total'    => $aceptados->sum('importe_total'),
+                    'iva' => $aceptados->sum('iva'),
+                    'total' => $aceptados->sum('importe_total'),
                 ],
                 'estadisticas' => [
-                    'total_productos'      => $productosCombinados->count(),
-                    'productos_aceptados'  => $productosCombinados->where('estatus_proveedor', 1)->sum('cantidad_producto'),
+                    'total_productos' => $productosCombinados->count(),
+                    'productos_aceptados' => $productosCombinados->where('estatus_proveedor', 1)->sum('cantidad_producto'),
                     'productos_rechazados' => $productosCombinados->where('estatus_proveedor', 2)->sum('cantidad_producto'),
                     'productos_pendientes' => $productosCombinados->where('estatus_proveedor', 0)->sum('cantidad_producto'),
                 ],
@@ -381,82 +412,16 @@ class OrdenCompraController extends BaseController
         }
     }
 
-    public function cotizarConOtrosProveedores(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id_usuario'               => 'required|integer|exists:dc_usuarios_plataforma,id',
-            'productos'                => 'required|array|min:1',
-            'productos.*.id_validacion' => 'required|integer|exists:dc_validacion_canje,id',
-            'productos.*.proveedores'  => 'required|array|min:1',
-            'productos.*.proveedores.*' => 'integer|exists:dc_catalogo_proveedores,id',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('El formato de datos no es válido.', $validator->errors());
-        }
-
-        $creados = [];
-        $omitidos = [];
-
-        DB::beginTransaction();
-        try {
-            $validaciones = ValidacionCanje::whereIn(
-                'id',
-                collect($request->productos)->pluck('id_validacion')
-            )->get()->keyBy('id');
-
-            foreach ($request->productos as $item) {
-                $original = $validaciones->get($item['id_validacion']);
-                if (!$original) {
-                    continue;
-                }
-
-                foreach (array_unique($item['proveedores']) as $idProveedor) {
-                    if ((int) $idProveedor === (int) $original->id_proveedor) {
-                        continue;
-                    }
-
-                    $yaExiste = ValidacionCanje::where('id_canje', $original->id_canje)
-                        ->where('id_producto', $original->id_producto)
-                        ->where('id_proveedor', $idProveedor)
-                        ->exists();
-
-                    if ($yaExiste) {
-                        $omitidos[] = ['id_validacion' => $original->id, 'id_proveedor' => $idProveedor];
-                        continue;
-                    }
-
-                    $copia = $original->replicate();
-                    $copia->id_proveedor = $idProveedor;
-                    $copia->no_orden = null;
-                    $copia->save();
-
-                    $creados[] = $copia;
-                }
-            }
-
-            DB::commit();
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return $this->sendError('Error al enviar a otros proveedores', $th->getMessage(), 500);
-        }
-
-        return $this->sendResponse(
-            ['creados' => $creados, 'omitidos' => $omitidos],
-            'Productos enviados a otros proveedores exitosamente.'
-        );
-    }
-
     public function enviarCotizacionProveedor(Request $request, OrdenCompraService $servicio)
     {
         $validator = Validator::make($request->all(), [
-            'id_usuario'                    => 'required|integer|exists:dc_usuarios_plataforma,id',
-            'id_proveedor'                  => 'nullable|integer|exists:dc_catalogo_proveedores,id',
-            'tipo_envio'                    => 'required|in:directo,proveedor',
-            'productos'                     => 'required|array|min:1',
-            'productos.*.id_validacion'     => 'required|integer|exists:dc_validacion_canje,id',
+            'id_usuario' => 'required|integer|exists:dc_usuarios_plataforma,id',
+            'id_proveedor' => 'nullable|integer|exists:dc_catalogo_proveedores,id',
+            'tipo_envio' => 'required|in:directo,proveedor',
+            'productos' => 'required|array|min:1',
+            'productos.*.id_validacion' => 'required|integer|exists:dc_validacion_canje,id',
             'productos.*.estatus_proveedor' => 'nullable|integer|in:0,1,2',
-            'productos.*.estatus_almacen'   => 'nullable|integer',
+            'productos.*.estatus_almacen' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
@@ -474,9 +439,9 @@ class OrdenCompraController extends BaseController
                 );
 
                 BitacoraEventos::create([
-                    'evento'      => 'Envío de cotización para proveedor',
+                    'evento' => 'Envío de cotización para proveedor',
                     'descripcion' => 'El usuario con id: ' . Auth::id() . " creó la orden {$orden->no_orden} para el proveedor {$request->id_proveedor}",
-                    'id_usuario'  => Auth::id(),
+                    'id_usuario' => Auth::id(),
                 ]);
 
                 return $orden;
@@ -509,28 +474,6 @@ class OrdenCompraController extends BaseController
         }
     }
 
-    private function generarNumeroOrdenUnico()
-    {
-        $maxIntentos = 100;
-        $intento = 0;
-
-        do {
-            // Generar 6 dígitos aleatorios
-            $numeroAleatorio = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $numeroOrden = 'OCB-' . $numeroAleatorio;
-
-            // Verificar si ya existe en la base de datos
-            $existe = OrdenCompra::where('no_orden', $numeroOrden)->exists();
-
-            $intento++;
-
-            if ($intento >= $maxIntentos) {
-                return $this->sendError('No se pudo generar un número de orden único después de ' . $maxIntentos . ' intentos', null, 500);
-            }
-        } while ($existe);
-
-        return $numeroOrden;
-    }
     private function encriptarCorto($id)
     {
         $key = env('APP_KEY');
@@ -696,33 +639,33 @@ class OrdenCompraController extends BaseController
 
             $respuesta = [
                 'orden_compra' => [
-                    'id'              => $ordenCompra->id,
-                    'no_orden'        => $ordenCompra->no_orden,
-                    'estatus'         => $ordenCompra->estatus,
-                    'observaciones'   => $ordenCompra->observaciones,
-                    'created_at'      => $ordenCompra->created_at,
-                    'updated_at'      => $ordenCompra->updated_at,
-                    'id_usuario'      => $ordenCompra->id_usuario,
+                    'id' => $ordenCompra->id,
+                    'no_orden' => $ordenCompra->no_orden,
+                    'estatus' => $ordenCompra->estatus,
+                    'observaciones' => $ordenCompra->observaciones,
+                    'created_at' => $ordenCompra->created_at,
+                    'updated_at' => $ordenCompra->updated_at,
+                    'id_usuario' => $ordenCompra->id_usuario,
                     'nombre_vendedor' => $ordenCompra->nombre_vendedor,
                 ],
                 'proveedor' => [
-                    'id'              => $ordenCompra->id_proveedor,
-                    'nombre'          => $ordenCompra->nombre_proveedor,
-                    'razon_social'    => $ordenCompra->razon_social,
-                    'descripcion'     => $ordenCompra->descripcion_proveedor,
+                    'id' => $ordenCompra->id_proveedor,
+                    'nombre' => $ordenCompra->nombre_proveedor,
+                    'razon_social' => $ordenCompra->razon_social,
+                    'descripcion' => $ordenCompra->descripcion_proveedor,
                     'nombre_contacto' => $ordenCompra->nombre_contacto,
-                    'telefono'        => $ordenCompra->telefono,
-                    'correo'          => $ordenCompra->correo,
+                    'telefono' => $ordenCompra->telefono,
+                    'correo' => $ordenCompra->correo,
                 ],
                 'productos' => $productosCombinados,
                 'totales' => [
                     'subtotal' => $aceptados->sum('subtotal'),
-                    'iva'      => $aceptados->sum('iva'),
-                    'total'    => $aceptados->sum('importe_total'),
+                    'iva' => $aceptados->sum('iva'),
+                    'total' => $aceptados->sum('importe_total'),
                 ],
                 'estadisticas' => [
-                    'total_productos'      => $productosCombinados->count(),
-                    'productos_aceptados'  => $productosCombinados->where('estatus_proveedor', 1)->sum('cantidad_producto'),
+                    'total_productos' => $productosCombinados->count(),
+                    'productos_aceptados' => $productosCombinados->where('estatus_proveedor', 1)->sum('cantidad_producto'),
                     'productos_rechazados' => $productosCombinados->where('estatus_proveedor', 2)->sum('cantidad_producto'),
                     'productos_pendientes' => $productosCombinados->where('estatus_proveedor', 0)->sum('cantidad_producto'),
                 ],
@@ -746,9 +689,9 @@ class OrdenCompraController extends BaseController
     {
         $validator = Validator::make($request->all(), [
             'id_orden_compra' => 'required|integer',
-            'llave'           => 'required_without:id_producto',
-            'id_producto'     => 'required_without:llave|integer',
-            'motivo'          => 'nullable|string|max:500',
+            'llave' => 'required_without:id_producto',
+            'id_producto' => 'required_without:llave|integer',
+            'motivo' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -793,7 +736,7 @@ class OrdenCompraController extends BaseController
             DB::commit();
 
             return $this->sendResponse([
-                'orden_compra'         => $ordenCompra,
+                'orden_compra' => $ordenCompra,
                 'producto_actualizado' => $productosCanje[$llave],
             ], "Producto {$accion} exitosamente.");
         } catch (\Throwable $th) {
@@ -803,55 +746,104 @@ class OrdenCompraController extends BaseController
     }
     public function enviarOCAprobacion(Request $request)
     {
-        DB::beginTransaction();
+        $validator = Validator::make($request->all(), [
+            'id_orden_compra' => 'required|integer',
+            'observaciones' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('El formato de datos no es válido.', $validator->errors());
+        }
+
         try {
-            $validator = Validator::make($request->all(), [
-                'id_orden_compra' => 'required|integer',
-                'observaciones' => 'nullable|string',
-            ]);
+            [$orden, $destinatarios, $detalle] = DB::transaction(function () use ($request) {
+                $orden = OrdenCompra::lockForUpdate()->find($request->id_orden_compra);
 
-            if ($validator->fails()) {
-                DB::rollBack();
-                return $this->sendError('El formato de datos no es válido.', $validator->errors());
-            }
+                if (!$orden) {
+                    throw new \DomainException('Esta orden de compra no existe');
+                }
 
-            $orden_compra = OrdenCompra::find($request->id_orden_compra);
-            $proveedor = CatalogoProveedores::find($orden_compra->id_proveedor);
+                // Evita doble envío y notificaciones duplicadas
+                if ($orden->estatus !== 'cotizacion_enviada_a_proveedor') {
+                    throw new \DomainException('Esta cotización ya fue enviada a aprobación.');
+                }
 
-            if (!$orden_compra) {
-                DB::rollBack();
-                return $this->sendError('Esta orden de compra no existe', 'error', 404);
-            }
+                $proveedor = CatalogoProveedores::find($orden->id_proveedor);
+                if (!$proveedor) {
+                    throw new \DomainException('No existe el proveedor');
+                }
 
-            if (!$proveedor) {
-                DB::rollBack();
-                return $this->sendError('No existe el proveedor', 'error', 404);
-            }
+                $orden->update([
+                    'observaciones' => $request->observaciones,
+                    'estatus' => 'cotizacion_validada_por_proveedor',
+                ]);
 
-            $orden_compra->update([
-                'observaciones' => $request->observaciones,
-                'estatus' => 'cotizacion_validada_por_proveedor',
-            ]);
+                // Resumen de la respuesta para que quien revisa sepa qué esperar
+                $lineas = collect(json_decode($orden->productos_canje, true) ?: []);
+                $disponibles = $lineas->where('estatus_proveedor', 1)->count();
+                $noDisponibles = $lineas->where('estatus_proveedor', 2)->count();
 
-            $log['vista'] = 0;
-            $log['detalle'] = "El proveedor {$proveedor->nombre} envió a aprobación la orden {$orden_compra->no_orden}";
-            $log['id_tipo_notificacion'] = 1;
-            $log['id_usuario_creador'] = $orden_compra->id_proveedor;
-            $log['id_usuario_para'] = $orden_compra->id_usuario;
-            Notificaciones::create($log);
+                $detalle = "El proveedor {$proveedor->nombre} respondió la cotización {$orden->no_orden}: "
+                    . "{$disponibles} disponible(s), {$noDisponibles} no disponible(s). Pendiente de revisión.";
 
-            DB::commit();
-            return $this->sendResponse($orden_compra);
+                // Quien creó la orden + administradores, sin repetir
+                $destinatarios = UsuariosPlataforma::where('tipo_usuario', 7)
+                    ->pluck('id')
+                    ->push($orden->id_usuario)
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                foreach ($destinatarios as $idUsuario) {
+                    Notificaciones::create([
+                        'vista' => 0,
+                        'creada' => now(),
+                        'detalle' => $detalle,
+                        'id_tipo_notificacion' => 1,
+                        'id_usuario_creador' => $orden->id_proveedor,
+                        'id_usuario_para' => $idUsuario,
+                    ]);
+                }
+
+                return [$orden, $destinatarios, $detalle];
+            });
+        } catch (\DomainException $e) {
+            return $this->sendError($e->getMessage(), null, 422);
         } catch (\Throwable $th) {
-            DB::rollBack();
             return $this->sendError('Error al enviar la orden de compra a aprobación', $th->getMessage(), 500);
         }
+
+        // Fuera de la transacción: si WhatsApp falla, la aprobación ya quedó guardada
+        $this->notificarRevisionWhatsApp($destinatarios, $detalle);
+
+        return $this->sendResponse($orden, 'Cotización enviada a aprobación.');
     }
-    public function enviarOrdenCompraFileProveedor(Request $request)
+
+    private function notificarRevisionWhatsApp(Collection $destinatarios, string $detalle): void
+    {
+        try {
+            $telefonos = UsuariosPlataforma::whereIn('id', $destinatarios)
+                ->whereNotNull('telefono')
+                ->where('telefono', '!=', '')
+                ->pluck('telefono')
+                ->unique();
+
+            $url = config('app.url_frontend') . '/generar-orden-compra';
+
+            $mensaje = "📋 *Cotización pendiente de revisión*\n\n{$detalle}\n\n🔗 Revísala en:\n{$url}";
+
+            foreach ($telefonos as $telefono) {
+                $this->whatsappService->sendMessage($telefono, $mensaje);
+            }
+        } catch (\Throwable $th) {
+            Log::error('Error al notificar revisión por WhatsApp: ' . $th->getMessage());
+        }
+    }
+    public function enviarOrdenCompraFileProveedor(Request $request, CierreCanjesService $cierre)
     {
         $validator = Validator::make($request->all(), [
             'id_orden_compra' => 'required|integer',
-            'id_proveedor'    => 'required|integer|exists:dc_catalogo_proveedores,id',
+            'id_proveedor' => 'required|integer|exists:dc_catalogo_proveedores,id',
         ]);
 
         if ($validator->fails()) {
@@ -862,7 +854,7 @@ class OrdenCompraController extends BaseController
         $estado = 'orden_compra_enviada_a_proveedor';
 
         try {
-            [$orden_compra, $productosParaEnvio] = DB::transaction(function () use ($request, $estado) {
+            [$orden_compra, $productosParaEnvio] = DB::transaction(function () use ($request, $estado, $cierre) {
                 $orden_compra = OrdenCompra::lockForUpdate()->find($request->id_orden_compra);
 
                 if (!$orden_compra) {
@@ -873,6 +865,9 @@ class OrdenCompraController extends BaseController
                 if ($orden_compra->estatus === $estado) {
                     throw new \DomainException('Esta orden ya fue enviada al proveedor');
                 }
+
+                // Evita comprar el mismo producto de canje a dos proveedores
+                $cierre->asegurarSinCompraDuplicada($orden_compra);
 
                 $productos = $this->productosDeOrden($orden_compra->productos_canje);
 
@@ -890,30 +885,30 @@ class OrdenCompraController extends BaseController
                     $productosParaEnvio[] = $p;
 
                     RecepcionAlmacen::create([
-                        'id_canje'          => $p['id_canje'],
-                        'id_usuario'        => $orden_compra->id_usuario,
-                        'id_producto'       => $p['id_producto'],
-                        'id_orden_compra'   => $orden_compra->id,
+                        'id_canje' => $p['id_canje'],
+                        'id_usuario' => $orden_compra->id_usuario,
+                        'id_producto' => $p['id_producto'],
+                        'id_orden_compra' => $orden_compra->id,
                         'cantidad_producto' => $p['cantidad_producto'],
-                        'cantidad_almacen'  => 0,
-                        'id_proveedor'      => $request->id_proveedor,
-                        'precio_compra'     => $p['precio_unitario'] ?? null,
-                        'fecha_compra'      => null,
-                        'costo_envio_real'  => ($p['envio_base'] ?? 0) + ($p['costo_caja'] ?? 0) + ($p['envio_extra'] ?? 0),
-                        'comentarios'       => '',
-                        'guia'              => '',
-                        'cantidad'          => $p['cantidad_producto'] ?? 1,
-                        'sku'               => $p['sku'],
-                        'nombre_producto'   => $p['nombre_producto'] ?? $p['nombre_premio'],
+                        'cantidad_almacen' => 0,
+                        'id_proveedor' => $request->id_proveedor,
+                        'precio_compra' => $p['precio_unitario'] ?? null,
+                        'fecha_compra' => null,
+                        'costo_envio_real' => ($p['envio_base'] ?? 0) + ($p['costo_caja'] ?? 0) + ($p['envio_extra'] ?? 0),
+                        'comentarios' => '',
+                        'guia' => '',
+                        'cantidad' => $p['cantidad_producto'] ?? 1,
+                        'sku' => $p['sku'],
+                        'nombre_producto' => $p['nombre_producto'] ?? $p['nombre_premio'],
                     ]);
                 }
 
                 $orden_compra->update(['estatus' => $estado]);
 
                 BitacoraEventos::create([
-                    'evento'      => 'Envío de orden de compra para proveedor',
+                    'evento' => 'Envío de orden de compra para proveedor',
                     'descripcion' => 'El usuario con id: ' . Auth::id() . " envió la orden {$orden_compra->no_orden} al proveedor {$request->id_proveedor}",
-                    'id_usuario'  => Auth::id(),
+                    'id_usuario' => Auth::id(),
                 ]);
 
                 return [$orden_compra, $productosParaEnvio];
@@ -979,7 +974,7 @@ class OrdenCompraController extends BaseController
             return $this->sendError('Error al rechazar la cotización', $th->getMessage(), 500);
         }
     }
-    public function validarOrdenCompraFinal(Request $request)
+    public function validarOrdenCompraFinal(Request $request, CierreCanjesService $cierre)
     {
         DB::beginTransaction();
         try {
@@ -993,6 +988,11 @@ class OrdenCompraController extends BaseController
             }
 
             $orden_compra = OrdenCompra::find($request->id_orden_compra);
+            if (!$orden_compra) {
+                DB::rollBack();
+                return $this->sendError('Esta orden de compra no existe', 'error', 404);
+            }
+
             if (
                 !$request->has('id_proveedor') ||
                 $request->id_proveedor === null ||
@@ -1008,14 +1008,13 @@ class OrdenCompraController extends BaseController
                 $textoBitacora = "El proveedor {$proveedor->nombre} ha validado la orden {$orden_compra->no_orden}";
             }
 
-            if (!$orden_compra) {
-                DB::rollBack();
-                return $this->sendError('Esta orden de compra no existe', 'error', 404);
-            }
+
 
             $orden_compra->update([
                 'estatus' => 'orden_validada_por_proveedor',
             ]);
+
+            $cierre->cerrarPorOrden($orden_compra);
 
             $log['vista'] = 0;
             $log['detalle'] = $textoBitacora;
@@ -1031,7 +1030,7 @@ class OrdenCompraController extends BaseController
             return $this->sendError('Error al validar la orden de compra', $th->getMessage(), 500);
         }
     }
-    public function subirPDFFactura(Request $request)
+    public function subirPDFFactura(Request $request, CierreCanjesService $cierre)
     {
         DB::beginTransaction();
         try {
@@ -1081,6 +1080,9 @@ class OrdenCompraController extends BaseController
             $orden_compra->update([
                 'estatus' => 'factura_subida_correctamente_proveedor',
             ]);
+
+            // Factura completa (XML + PDF): el producto del canje queda ejecutado
+            $cierre->cerrarPorOrden($orden_compra);
 
             DB::commit();
             return $this->sendResponse([

@@ -1,16 +1,68 @@
+@php
+    $productos = collect($productosData->productos);
+    $totalUnidades = $productos->sum('cantidad_producto');
+    $subtotal = $productos->sum('subtotal');
+    $iva = $productos->sum('iva');
+    $total = $productos->sum('importe_total');
+@endphp
 <!DOCTYPE html>
 <html>
 
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        h2 { color: #00506E; border-bottom: 2px solid #00506E; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th, td { padding: 8px; border: 1px solid #00506E; text-align: left; }
-        th { background-color: #00506E; color: #fff; }
-        tfoot td { font-weight: bold; background-color: #f5f5f5; color: #00506E; }
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h2 {
+            color: #00506E;
+            border-bottom: 2px solid #00506E;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            border: 1px solid #00506E;
+            text-align: left;
+        }
+
+        th {
+            background-color: #00506E;
+            color: #fff;
+        }
+
+        .num {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        tfoot td {
+            font-weight: bold;
+            background-color: #f5f5f5;
+            color: #00506E;
+        }
+
+        tfoot tr.total td {
+            background-color: #00506E;
+            color: #fff;
+        }
+
         .btn {
             display: inline-block;
             background-color: #00506E;
@@ -21,7 +73,13 @@
             font-weight: bold;
             margin-top: 10px;
         }
-        .footer { color: #666; font-size: 14px; margin-top: 20px; }
+
+        .footer {
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+
         .header {
             background: linear-gradient(180deg, rgba(0, 181, 225, 1) 0%, rgba(0, 132, 171, 1) 100%);
             padding: 15px 0;
@@ -45,30 +103,40 @@
                 <tr>
                     <th>SKU</th>
                     <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Precio Unitario</th>
-                    <th>Total</th>
+                    <th class="num" style="text-align:right">Cantidad</th>
+                    <th class="num" style="text-align:right">Precio unitario</th>
+                    <th class="num" style="text-align:right">Importe</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach ($productosData->productos as $producto)
-                <tr>
-                    <td>{{ $producto['sku'] ?? '-' }}</td>
-                    <td>{{ $producto['nombre_producto'] }}</td>
-                    <td>{{ $producto['cantidad_producto'] }}</td>
-                    <td>${{ number_format($producto['precio_unitario'], 2) }}</td>
-                    <td>${{ number_format($producto['importe_total'], 2) }}</td>
-                </tr>
+                @foreach ($productos as $producto)
+                    <tr>
+                        <td>{{ $producto['sku'] ?? '-' }}</td>
+                        <td>{{ $producto['nombre_producto'] }}</td>
+                        <td class="num" style="text-align:right">{{ number_format($producto['cantidad_producto']) }}</td>
+                        <td class="num" style="text-align:right">${{ number_format($producto['precio_unitario'], 2) }}</td>
+                        <td class="num" style="text-align:right">${{ number_format($producto['subtotal'], 2) }}</td>
+                    </tr>
                 @endforeach
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="4">IVA</td>
-                    <td>${{ number_format($productosData->total_iva, 2) }}</td>
+                    <td colspan="2">Total de unidades</td>
+                    <td class="num" style="text-align:right">{{ number_format($totalUnidades) }}</td>
+                    <td colspan="2"></td>
                 </tr>
                 <tr>
-                    <td colspan="4">Total General</td>
-                    <td>${{ number_format($productosData->total_general, 2) }}</td>
+                    <td colspan="4">Subtotal</td>
+                    <td class="num" style="text-align:right">${{ number_format($subtotal, 2) }}</td>
+                </tr>
+                <tr>
+                    <td colspan="4">IVA (16%)</td>
+                    <td class="num" style="text-align:right">${{ number_format($iva, 2) }}</td>
+                </tr>
+                <tr class="total">
+                    <td colspan="4" style="background-color:#00506E;color:#fff">Total</td>
+                    <td class="num" style="text-align:right;background-color:#00506E;color:#fff">
+                        ${{ number_format($total, 2) }}</td>
                 </tr>
             </tfoot>
         </table>

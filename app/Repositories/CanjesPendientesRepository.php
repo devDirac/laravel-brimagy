@@ -14,7 +14,8 @@ class CanjesPendientesRepository
         return DB::table('dc_validacion_canje as vc')
             ->join('dc_catalogo_productos as cdp', 'cdp.id', '=', 'vc.id_producto')
             ->where('vc.estatus', 'identidad_validada')
-            ->where(fn($q) => $q->whereNull('vc.no_orden')->orWhere('vc.no_orden', ''));
+            ->where(fn($q) => $q->whereNull('vc.no_orden')->orWhere('vc.no_orden', ''))
+            ->whereNull('vc.orden_ejecutada');
     }
 
     public function porProveedor(?int $idProveedor): Collection

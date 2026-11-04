@@ -1537,7 +1537,7 @@ class ProductosController extends BaseController
             $idsBrimagy = $productos->pluck('id_producto_brimagy')->filter()->unique()->values();
 
             if ($idsBrimagy->isNotEmpty()) {
-                $modeloExterno = $esClubBohn ? ProductoClub::class : ProductoBrimagy::class;
+                $modeloExterno = $esClubBohn ? ProductoClub::class : ProductoLocal::class;
 
                 $extras = $modeloExterno::whereIn('id', $idsBrimagy)
                     ->get(['id', 'TyC', 'validity'])
