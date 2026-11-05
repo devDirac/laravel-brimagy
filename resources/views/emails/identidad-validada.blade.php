@@ -94,12 +94,18 @@
                 <td>{{ $canje->phone }}</td>
             </tr>
             <tr>
-                <td class="label">Premio:</td>
-                <td>{{ $canje->nombre_premio }}</td>
+                <td class="label">Premios:</td>
+                <td>
+                    @forelse ($canje->productos ?? [] as $p)
+                        {{ $p->nombre }} (x{{ $p->cantidad }}) — {{ number_format((float) $p->puntos) }} pts<br>
+                    @empty
+                        {{ $canje->nombre_premio }}
+                    @endforelse
+                </td>
             </tr>
             <tr>
-                <td class="label">Puntos canjeados:</td>
-                <td>{{ $canje->puntos_canjeados }}</td>
+                <td class="label">Total de puntos:</td>
+                <td>{{ number_format((float) $canje->puntos_canjeados) }}</td>
             </tr>
             <tr>
                 <td class="label">Dirección:</td>

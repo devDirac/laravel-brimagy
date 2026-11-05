@@ -19,11 +19,14 @@ class RecepcionAlmacen extends Model
         'cantidad_almacen',
         'id_proveedor',
         'precio_compra',
-        'fecha',
+        'fecha_compra',
+        'costo_envio_real',
+        'folio_factura',
         'comentarios',
         'estatus',
         'imei',
         'no_serie',
+        'tipo_envio',
         'guia',
     ];
 

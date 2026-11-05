@@ -14,6 +14,7 @@ class VariablesGlobales extends Model
         'envio_base',
         'costo_caja',
         'envio_extra',
+        'factor',
         'id_plataforma',
     ];
 

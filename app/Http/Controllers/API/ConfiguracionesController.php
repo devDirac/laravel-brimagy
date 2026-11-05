@@ -8,6 +8,7 @@ use App\Http\Controllers\API\BaseController as BaseController;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\BitacoraEventos;
+use App\Models\Periodo;
 use App\Models\Plataformas;
 use App\Models\VariablesGlobales;
 
@@ -23,6 +24,7 @@ class ConfiguracionesController extends BaseController
                 'envio_base' => 'required|integer',
                 'costo_caja' => 'required|integer',
                 'envio_extra' => 'required|integer',
+                'factor' => 'required|integer',
                 'id_plataforma' => 'required|integer',
                 'tipo' => 'required|string',
             ]);
@@ -45,6 +47,7 @@ class ConfiguracionesController extends BaseController
                     'envio_base' => $request->envio_base,
                     'costo_caja' => $request->costo_caja,
                     'envio_extra' => $request->envio_extra,
+                    'factor' => $request->factor,
                     'id_plataforma' => $request->id_plataforma,
                     'updated_at' => now()->setTimezone('America/Mexico_City'),
                 ]);
@@ -65,6 +68,7 @@ class ConfiguracionesController extends BaseController
                 'envio_base' => $request->envio_base,
                 'costo_caja' => $request->costo_caja,
                 'envio_extra' => $request->envio_extra,
+                'factor' => $request->factor,
                 'id_plataforma' => $request->id_plataforma,
             ]);
 
@@ -83,73 +87,213 @@ class ConfiguracionesController extends BaseController
         }
     }
 
+    public function crearPeriodo(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'plataforma' => 'required|string',
+                'fecha_inicio_periodo' => 'required|string',
+                'fecha_fin_periodo' => 'required|string'
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $user = Auth::user();
+
+            // Desactivar los periodos existentes de esa plataforma
+            Periodo::where('id_plataforma', $id_plataforma)
+                ->update(['activo' => 2]);
+
+            $periodo = Periodo::create([
+                'id_plataforma' => $id_plataforma,
+                'id_usuario_creador' => $user->id,
+                'fecha_inicio' => $request->fecha_inicio_periodo,
+                'fecha_fin' => $request->fecha_fin_periodo,
+                'activo' => 1
+            ]);
+
+            $log['evento'] = 'Creación de periodo';
+            $log['descripcion'] = "El usuario con id: {$user->id} añadio un perioro del {$request->fecha_inicio_periodo} al {$request->fecha_fin_periodo}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($periodo, 'Periodo registrado exitosamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al registrar el periodo', $th->getMessage(), 500);
+        }
+    }
+
+    public function editarPeriodo(Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $validator = Validator::make($request->all(), [
+                'id_periodo' => 'required|integer',
+                'fecha_inicio_periodo' => 'required|string',
+                'fecha_fin_periodo' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $periodoExistente = Periodo::where('id', $request->id_periodo)->first();
+
+            if (!$periodoExistente) {
+                DB::rollBack();
+                return $this->sendError('No existe el periodo', 'error', 404);
+            }
+
+            $periodoExistente->update([
+                'fecha_inicio' => $request->fecha_inicio_periodo,
+                'fecha_fin' => $request->fecha_fin_periodo,
+                'updated_at' => now()->setTimezone('America/Mexico_City'),
+            ]);
+
+            $user = Auth::user();
+            $log['evento'] = 'Actualización de periodo';
+            $log['descripcion'] = "El usuario con id: {$user->id} actualizó el periodo {$request->id_periodo} del {$request->fecha_inicio_periodo} al {$request->fecha_fin_periodo}";
+            $log['id_usuario'] = $user->id;
+            BitacoraEventos::create($log);
+
+            DB::commit();
+
+            return $this->sendResponse($periodoExistente, 'Periodo actualizado correctamente.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error al editar el periodo', $th->getMessage(), 500);
+        }
+    }
+
+    public function getPeriodos(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'plataforma' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                DB::rollBack();
+                return $this->sendError('El formato de datos no es válido.', $validator->errors());
+            }
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $periodos = Periodo::where('id_plataforma', $id_plataforma)->get();
+
+            return $this->sendResponse($periodos);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener el periodo actual', $th, 500);
+        }
+    }
+
     public function sincronizarVariablesEnProductos(Request $request)
     {
         DB::beginTransaction();
 
         try {
-            $variables = DB::table('dc_variables_globales')->get();
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
 
-            $plataformasSincronizadas = 0;
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $variables = DB::table('dc_variables_globales')->where('id_plataforma', $id_plataforma)->first();
+
+            if (!$variables) {
+                return $this->sendError('No existen variables globales para la plataforma ' . $request->plataforma, 'error', 404);
+            }
+
             $productosSincronizados = 0;
 
-            foreach ($variables as $variable) {
-                // Obtener productos desincronizados
-                $productosDesincronizados = DB::table('dc_catalogo_productos')
-                    ->where('id_plataforma', $variable->id_plataforma)
-                    ->where(function ($query) use ($variable) {
-                        $query->where('fee_brimagy', '!=', $variable->fee_brimagy)
-                            ->orWhere('envio_base', '!=', $variable->envio_base)
-                            ->orWhere('costo_caja', '!=', $variable->costo_caja)
-                            ->orWhere('envio_extra', '!=', $variable->envio_extra);
-                    })
-                    ->get();
+            $productos = DB::table('dc_catalogo_productos')
+                ->where('id_plataforma', $id_plataforma)
+                ->whereNotIn('id', function ($query) {
+                    $query->select('id_producto')->from('dc_producto_editado');
+                })
+                ->get();
 
-                if ($productosDesincronizados->isEmpty()) {
-                    continue;
-                }
+            foreach ($productos as $producto) {
 
-                foreach ($productosDesincronizados as $producto) {
-                    $porcentaje = (float) $variable->fee_brimagy / 100;
-                    $valor_con_fee = round((float) $producto->costo_puntos_sin_iva * $porcentaje, 2);
-                    $subtotal = $producto->costo_puntos_sin_iva + $valor_con_fee;
-                    $total_envio = $variable->envio_base + $variable->costo_caja + $variable->envio_extra;
-                    $total = $subtotal + $total_envio;
-                    $puntos = $total + 1;
-                    $factor = $puntos * 15;
+                $fee_brimagy = $variables->fee_brimagy === 0 ? $producto->fee_brimagy : $variables->fee_brimagy;
+                $envio_base = $variables->envio_base === 0 ? $producto->envio_base : $variables->envio_base;
+                $costo_caja = $variables->costo_caja === 0 ? $producto->costo_caja : $variables->costo_caja;
+                $envio_extra = $variables->envio_extra === 0 ? $producto->envio_extra : $variables->envio_extra;
+                $valor_factor = $variables->factor === 0 ? $producto->valor_factor : $variables->factor;
 
-                    DB::table('dc_catalogo_productos')
-                        ->where('id', $producto->id)
-                        ->update([
-                            'fee_brimagy' => $variable->fee_brimagy,
-                            'envio_base' => $variable->envio_base,
-                            'costo_caja' => $variable->costo_caja,
-                            'envio_extra' => $variable->envio_extra,
-                            'subtotal' => $subtotal,
-                            'total_envio' => $total_envio,
-                            'total' => $total,
-                            'puntos' => $puntos,
-                            'factor' => $factor,
-                            'updated_at' => now()->setTimezone('America/Mexico_City'),
-                        ]);
+                $costo_proveedor_con_iva = $producto->costo_con_iva;
+                $costo_proveedor_sin_iva = $costo_proveedor_con_iva / 1.16;
 
-                    $productosSincronizados++;
-                }
+                $costo_puntos_con_iva = $producto->costo_puntos_con_iva;
+                $costo_puntos_sin_iva = $costo_puntos_con_iva / 1.16;
 
-                $plataformasSincronizadas++;
+                $porcentaje = (float) $fee_brimagy / 100;
+                $valor_con_fee = (float) $costo_puntos_sin_iva * $porcentaje;
+                $subtotal = $costo_puntos_sin_iva + $valor_con_fee;
+                $total_envio = $envio_base + $costo_caja + $envio_extra;
+                $total = $subtotal + $total_envio;
+                $redondeo = ($total % 2 !== 0) ? $total + 2 : $total + 1;
+                $puntos = $valor_factor == 0 ? round($total) : round($total * $valor_factor);
+
+                DB::table('dc_catalogo_productos')
+                    ->where('id', $producto->id)
+                    ->update([
+                        'fee_brimagy' => $fee_brimagy,
+                        'envio_base' => $envio_base,
+                        'costo_caja' => $costo_caja,
+                        'envio_extra' => $envio_extra,
+                        'costo_con_iva' => $costo_proveedor_con_iva,
+                        'costo_sin_iva' => $costo_proveedor_sin_iva,
+                        'costo_puntos_con_iva' => $costo_puntos_con_iva,
+                        'costo_puntos_sin_iva' => $costo_puntos_sin_iva,
+                        'subtotal' => $subtotal,
+                        'total_envio' => $total_envio,
+                        'total' => $total,
+                        'puntos' => $redondeo,
+                        'valor_factor' => $valor_factor,
+                        'factor' => $puntos,
+                        'updated_at' => now()->setTimezone('America/Mexico_City'),
+                    ]);
+
+                $productosSincronizados++;
             }
 
             $user = Auth::user();
             BitacoraEventos::create([
                 'evento' => 'Sincronización de productos',
-                'descripcion' => "El usuario {$user->id} sincronizó {$productosSincronizados} productos en {$plataformasSincronizadas} plataformas.",
+                'descripcion' => "El usuario {$user->id} sincronizó {$productosSincronizados} productos en la plataforma {$request->plataforma}.",
                 'id_usuario' => $user->id,
             ]);
 
             DB::commit();
 
             return $this->sendResponse([
-                'plataformas_sincronizadas' => $plataformasSincronizadas,
                 'productos_sincronizados' => $productosSincronizados,
             ], 'Sincronización completada exitosamente.');
         } catch (\Throwable $th) {
@@ -235,6 +379,7 @@ class ConfiguracionesController extends BaseController
                     'vg.envio_base',
                     'vg.costo_caja',
                     'vg.envio_extra',
+                    'vg.factor',
                     'p.nombre as nombre_plataforma',
                     'p.descripcion',
                     'vg.created_at as fecha_creacion',
@@ -249,33 +394,73 @@ class ConfiguracionesController extends BaseController
         }
     }
 
+    public function getVariablesGlobalesPorPlataforma(Request $request)
+    {
+        try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
+            $query = DB::table('dc_variables_globales as vg')
+                ->select(
+                    'vg.id',
+                    'vg.fee_brimagy',
+                    'vg.envio_base',
+                    'vg.costo_caja',
+                    'vg.envio_extra',
+                    'vg.factor',
+                    'p.nombre as nombre_plataforma',
+                    'p.descripcion',
+                    'vg.created_at as fecha_creacion',
+                )
+                ->leftJoin('dc_plataformas as p', 'p.id', '=', 'vg.id_plataforma')
+                ->where('vg.id_plataforma', $id_plataforma);
+
+            $variablesGlobales = $query->orderBy('vg.id', 'asc')->first();
+
+            return $this->sendResponse($variablesGlobales);
+        } catch (\Throwable $th) {
+            return $this->sendError('Error al obtener las variables globales', $th, 500);
+        }
+    }
+
     public function getProductosSincronizados(Request $request)
     {
         try {
-            $variables = DB::table('dc_variables_globales')->get();
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
 
-            $plataformasDesincronizadas = 0;
-            $productosDesincronizados = 0;
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
 
-            foreach ($variables as $variable) {
-                $cantidad = DB::table('dc_catalogo_productos')
-                    ->where('id_plataforma', $variable->id_plataforma)
-                    ->where(function ($query) use ($variable) {
-                        $query->where('fee_brimagy', '!=', $variable->fee_brimagy)
-                            ->orWhere('envio_base', '!=', $variable->envio_base)
-                            ->orWhere('costo_caja', '!=', $variable->costo_caja)
-                            ->orWhere('envio_extra', '!=', $variable->envio_extra);
-                    })
-                    ->count();
+            $variable = DB::table('dc_variables_globales')->where('id_plataforma', $id_plataforma)->first();
 
-                if ($cantidad > 0) {
-                    $plataformasDesincronizadas++;
-                    $productosDesincronizados += $cantidad;
-                }
+            if (!$variable) {
+                return $this->sendError('No existen variables globales para la plataforma ' . $request->plataforma, 'error', 404);
             }
 
+            $productosDesincronizados = DB::table('dc_catalogo_productos')
+                ->where('id_plataforma', $id_plataforma)
+                ->where(function ($query) use ($variable) {
+                    $query->where('fee_brimagy', '!=', $variable->fee_brimagy)
+                        ->orWhere('envio_base', '!=', $variable->envio_base)
+                        ->orWhere('costo_caja', '!=', $variable->costo_caja)
+                        ->orWhere('envio_extra', '!=', $variable->envio_extra)
+                        ->orWhere('valor_factor', '!=', $variable->factor);
+                })
+                ->whereNotIn('id', function ($query) {
+                    $query->select('id_producto')->from('dc_producto_editado');
+                })
+                ->count();
+
             return $this->sendResponse([
-                'plataformas_desincronizadas' => $plataformasDesincronizadas,
                 'productos_desincronizados' => $productosDesincronizados,
             ]);
         } catch (\Throwable $th) {

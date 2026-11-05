@@ -13,10 +13,11 @@ return new class extends Migration
     {
         Schema::create('dc_variables_globales', function (Blueprint $table) {
             $table->id();
-            $table->integer('fee_brimagy');
-            $table->integer('envio_base');
-            $table->integer('costo_caja');
-            $table->integer('envio_extra');
+            $table->decimal('fee_brimagy', 6, 4);
+            $table->decimal('envio_base', 6, 4);
+            $table->decimal('costo_caja', 6, 4);
+            $table->decimal('envio_extra', 6, 4);
+            $table->decimal('factor', 6, 4);
             $table->foreignId('id_plataforma')->constrained('dc_plataformas')->onDelete('cascade');
             $table->timestamps();
         });

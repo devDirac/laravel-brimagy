@@ -40,6 +40,10 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'plataforma' => [
+            'driver' => 'session',
+            'provider' => 'usuarios_plataforma',
+        ],
     ],
 
     /*
@@ -63,6 +67,10 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\User::class),
+        ],
+        'usuarios_plataforma' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\UsuariosPlataforma::class,
         ],
 
         // 'users' => [

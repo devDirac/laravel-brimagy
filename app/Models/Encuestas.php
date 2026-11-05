@@ -13,6 +13,7 @@ class Encuestas extends Model
         'pregunta',
         'tipo_encuesta',
         'tipo_pregunta',
+        'id_plataforma',
         'estatus',
     ];
 

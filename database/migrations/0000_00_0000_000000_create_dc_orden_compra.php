@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('dc_orden_compra', function (Blueprint $table) {
             $table->id();
             $table->string('no_orden');
-            $table->foreignId('id_proveedor')->constrained('dc_catalogo_proveedores')->onDelete('cascade');
+            $table->foreignId('id_proveedor')->nullable()->constrained('dc_catalogo_proveedores')->onDelete('cascade')->change();
             $table->foreignId('id_usuario')->constrained('users')->onDelete('cascade');
             $table->json('productos_canje');
             $table->longText('observaciones')->nullable();

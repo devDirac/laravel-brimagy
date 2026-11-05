@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('no_orden')->nullable();
             $table->datetime('fecha_validacion')->nullable();
             $table->integer('codigo_validacion')->nullable();
+            $table->integer('id_plataforma')->nullable();
             $table->enum('estatus', ['notificacion_enviada', 'solicitud_enviada', 'identidad_validada'])->default('notificacion_enviada');
             $table->timestamps();
         });

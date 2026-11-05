@@ -26,6 +26,7 @@ class NotificacionesController extends BaseController
             }
             $user = Auth::user();
             $log['vista'] = 0;
+            $log['detalle'] = $request->detalle;
             $log['id_tipo_notificacion'] = $request->id_tipo_notificacion;
             $log['id_usuario_creador'] = $user->id;
             $log['id_usuario_para'] = $request->id_usuario_para;

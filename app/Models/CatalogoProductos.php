@@ -31,11 +31,13 @@ class CatalogoProductos extends Model
         'total_envio',
         'total',
         'puntos',
+        'valor_factor',
         'factor',
         'foto_producto',
         'id_producto_brimagy',
         'id_plataforma',
-        'tipo_producto'
+        'tipo_producto',
+        'stock'
     ];
 
     protected $casts = [

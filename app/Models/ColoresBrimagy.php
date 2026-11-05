@@ -9,7 +9,7 @@ class ColoresBrimagy extends Model
 {
     use HasFactory;
     protected $connection = 'mysql_brimagy';
-    protected $table = 'colors_for_the_award_dirac';
+    protected $table = 'colors_for_the_award';
     protected $fillable = [
         'award_id',
         'color',

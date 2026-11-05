@@ -10,6 +10,7 @@ use App\Mail\EnviarEncuesta;
 use App\Models\BitacoraEventos;
 use App\Models\Encuestas;
 use App\Models\Notificaciones;
+use App\Models\Plataformas;
 use App\Models\RespuestasEncuesta;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
@@ -34,7 +35,16 @@ class EncuestasController extends BaseController
                 'pregunta' => 'required|string',
                 'tipo_encuesta' => 'required|string',
                 'tipo_pregunta' => 'required|string',
+                'plataforma' => 'required|string',
             ]);
+
+            //es club bohn
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
 
             if ($validator->fails()) {
                 DB::rollBack();
@@ -45,6 +55,7 @@ class EncuestasController extends BaseController
                 'pregunta' => $request->pregunta,
                 'tipo_encuesta' => $request->tipo_encuesta,
                 'tipo_pregunta' => $request->tipo_pregunta,
+                'id_plataforma' => $id_plataforma,
                 'estatus' => "activa",
             ]);
 
@@ -73,13 +84,22 @@ class EncuestasController extends BaseController
 
             $encuesta = str_replace('_', ' ', $request->tipo_encuesta);
 
-            $canje = DB::table('swaps_view')
-                ->where('id', $request->id_canje)
-                ->first();
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+
+            if ($request->plataforma === 'club_bohn') {
+                $canje = DB::connection('mysql_club_bohn')
+                    ->table('swaps_view')
+                    ->where('id', $request->id_canje)
+                    ->first();
+            } else {
+                $canje = DB::table('swaps_view')
+                    ->where('id', $request->id_canje)
+                    ->first();
+            }
 
             if ($canje) {
-                $this->enviarWhatsApp($canje, $request->tipo_encuesta);
-                $this->enviarCorreo($canje, $request->tipo_encuesta);
+                $this->enviarWhatsApp($canje, $request->tipo_encuesta, $plataforma);
+                $this->enviarCorreo($canje, $request->tipo_encuesta, $plataforma);
             }
 
             $user = Auth::user();
@@ -98,9 +118,18 @@ class EncuestasController extends BaseController
             return $this->sendError('Error al enviar la encuesta.', $th->getMessage(), 500);
         }
     }
-    public function getEncuestasDisponibles()
+    public function getEncuestasDisponibles(Request $request)
     {
         try {
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             $encuestas = DB::table('dc_encuestas as e')
                 ->select(
                     'e.tipo_encuesta',
@@ -109,6 +138,7 @@ class EncuestasController extends BaseController
                 )
                 ->leftJoin('dc_respuestas_encuesta as re', 'e.id', '=', 're.id_pregunta')
                 ->where('e.estatus', 'activa')
+                ->where('e.id_plataforma', $id_plataforma)
                 ->groupBy('e.tipo_encuesta')
                 ->get();
 
@@ -128,6 +158,15 @@ class EncuestasController extends BaseController
             if ($validator->fails()) {
                 return $this->sendError('Falta el tipo de encuesta.', $validator->errors());
             }
+
+            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
+            // es club bohn
+            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
+            if (!$plataformaModel) {
+                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
+            }
+            $id_plataforma = $plataformaModel->id;
+
             $encuesta = DB::table('dc_encuestas as e')
                 ->select(
                     'e.id',
@@ -137,6 +176,7 @@ class EncuestasController extends BaseController
                     'e.estatus',
                 )
                 ->where('e.tipo_encuesta', 'LIKE', "%{$request->tipo_encuesta}%")
+                ->where('e.id_plataforma', $id_plataforma)
                 ->orderBy('e.id', 'desc')
                 ->get();
 
@@ -343,10 +383,18 @@ class EncuestasController extends BaseController
             }
 
             $idOrdenCompraDesencriptado = $this->desencriptarCorto($request->id_canje);
+            $plataformaDesencriptado = $this->desencriptarCorto($request->plataforma);
 
-            $canje = DB::table('swaps_view')
-                ->where('id', $idOrdenCompraDesencriptado)
-                ->first();
+            if ($plataformaDesencriptado === "club bohn") {
+                $canje = DB::connection('mysql_club_bohn')
+                    ->table('swaps_view')
+                    ->where('id', $idOrdenCompraDesencriptado)
+                    ->first();
+            } else {
+                $canje = DB::table('swaps_view')
+                    ->where('id', $idOrdenCompraDesencriptado)
+                    ->first();
+            }
 
             if (!$canje) {
                 DB::rollBack();
@@ -410,34 +458,78 @@ class EncuestasController extends BaseController
             if ($validator->fails()) {
                 return $this->sendError('Falta el tipo de encuesta.', $validator->errors());
             }
+            if ($request->plataforma === 'club_bohn') {
 
-            $respuestas = DB::table('dc_respuestas_encuesta as re')
-                ->select(
-                    're.id as id_respuesta',
-                    'e.pregunta',
-                    'e.tipo_encuesta',
-                    'e.tipo_pregunta',
-                    're.id_canje',
-                    DB::raw("CONCAT_WS(' ', sv.name, sv.first_last_name, sv.second_last_name) as nombre_completo"),
-                    're.respuesta',
-                    're.created_at as creacion_respuesta',
-                )
-                ->leftJoin('dc_encuestas as e', 're.id_pregunta', '=', 'e.id')
-                ->leftJoin('swaps_view as sv', 're.id_canje', '=', 'sv.id')
-                ->where('e.tipo_encuesta', 'LIKE', "%{$request->tipo_encuesta}%")
-                ->groupBy(
-                    're.id',
-                    'e.pregunta',
-                    'e.tipo_encuesta',
-                    'e.tipo_pregunta',
-                    're.id_canje',
-                    'nombre_completo',
-                    're.respuesta',
-                    're.created_at',
-                    'e.id'
-                )
-                ->orderBy('e.id', 'desc')
-                ->get();
+                $respuestas = DB::table('dc_respuestas_encuesta as re')
+                    ->select(
+                        're.id as id_respuesta',
+                        'e.pregunta',
+                        'e.tipo_encuesta',
+                        'e.tipo_pregunta',
+                        're.id_canje',
+                        're.respuesta',
+                        're.created_at as creacion_respuesta',
+                    )
+                    ->leftJoin('dc_encuestas as e', 're.id_pregunta', '=', 'e.id')
+                    ->where('e.tipo_encuesta', 'LIKE', "%{$request->tipo_encuesta}%")
+                    ->groupBy(
+                        're.id',
+                        'e.pregunta',
+                        'e.tipo_encuesta',
+                        'e.tipo_pregunta',
+                        're.id_canje',
+                        're.respuesta',
+                        're.created_at',
+                        'e.id'
+                    )
+                    ->orderBy('e.id', 'desc')
+                    ->get();
+
+                $idsCanje = $respuestas->pluck('id_canje')->filter()->unique()->values();
+
+                $nombres = DB::connection('mysql_club_bohn')
+                    ->table('swaps_view as sv')
+                    ->whereIn('sv.id', $idsCanje)
+                    ->select(
+                        'sv.id',
+                        DB::raw("CONCAT_WS(' ', sv.name, sv.first_last_name, sv.second_last_name) as nombre_completo")
+                    )
+                    ->get()
+                    ->keyBy('id');
+
+                $respuestas = $respuestas->map(function ($respuesta) use ($nombres) {
+                    $respuesta->nombre_completo = $nombres->get($respuesta->id_canje)->nombre_completo ?? null;
+                    return $respuesta;
+                });
+            } else {
+                $respuestas = DB::table('dc_respuestas_encuesta as re')
+                    ->select(
+                        're.id as id_respuesta',
+                        'e.pregunta',
+                        'e.tipo_encuesta',
+                        'e.tipo_pregunta',
+                        're.id_canje',
+                        DB::raw("CONCAT_WS(' ', sv.name, sv.first_last_name, sv.second_last_name) as nombre_completo"),
+                        're.respuesta',
+                        're.created_at as creacion_respuesta',
+                    )
+                    ->leftJoin('dc_encuestas as e', 're.id_pregunta', '=', 'e.id')
+                    ->leftJoin('swaps_view as sv', 're.id_canje', '=', 'sv.id')
+                    ->where('e.tipo_encuesta', 'LIKE', "%{$request->tipo_encuesta}%")
+                    ->groupBy(
+                        're.id',
+                        'e.pregunta',
+                        'e.tipo_encuesta',
+                        'e.tipo_pregunta',
+                        're.id_canje',
+                        'nombre_completo',
+                        're.respuesta',
+                        're.created_at',
+                        'e.id'
+                    )
+                    ->orderBy('e.id', 'desc')
+                    ->get();
+            }
 
             return $this->sendResponse($respuestas, 'Respuestas de la encuesta cargadas correctamente');
         } catch (\Throwable $th) {
@@ -493,13 +585,14 @@ class EncuestasController extends BaseController
 
         return $id;
     }
-    private function enviarWhatsApp($canje, $tipo_encuesta = null)
+    private function enviarWhatsApp($canje, $tipo_encuesta = null, $plataforma = null)
     {
         try {
 
             $encuesta = str_replace('_', ' ', $tipo_encuesta);
             $canjeIdEncriptado = $this->encriptarCorto($canje->id);
-            $urlva = config('app.url_frontend') . "/encuesta/{$tipo_encuesta}/{$canjeIdEncriptado}";
+            $plataformaEncriptada = $this->encriptarCorto($plataforma);
+            $urlva = config('app.url_frontend') . "/encuesta/{$tipo_encuesta}/{$canjeIdEncriptado}/{$plataformaEncriptada}";
 
             $titulo = "¡Hola, {$canje->name}! Confirmamos que tu premio ha sido entregado con éxito. ✅";
             $mensaje = "Para asegurarnos de que todo salió perfecto, te invitamos a completar esta encuesta de {$encuesta}:\n\n" .
@@ -515,7 +608,7 @@ class EncuestasController extends BaseController
         }
     }
 
-    private function enviarCorreo($canje, $tipo_encuesta = null)
+    private function enviarCorreo($canje, $tipo_encuesta = null, $plataforma = null)
     {
         try {
 
@@ -537,7 +630,8 @@ class EncuestasController extends BaseController
 
 
             $canjeIdEncriptado = $this->encriptarCorto($canje->id);
-            $urlva = config('app.url_frontend') . "/encuesta/{$tipo_encuesta}/{$canjeIdEncriptado}";
+            $plataformaEncriptada = $this->encriptarCorto($plataforma);
+            $urlva = config('app.url_frontend') . "/encuesta/{$tipo_encuesta}/{$canjeIdEncriptado}/{$plataformaEncriptada}";
 
             Mail::to($canjeData->email)->send(new EnviarEncuesta($canjeData, $urlva));
 

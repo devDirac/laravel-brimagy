@@ -10,7 +10,6 @@ class ValidacionCanje extends Model
     use HasFactory;
     protected $table = 'dc_validacion_canje';
     protected $fillable = [
-        'id_canje',
         'id_usuario_admin',
         'id_canje',
         'id_producto',
@@ -19,6 +18,7 @@ class ValidacionCanje extends Model
         'no_orden',
         'fecha_validacion',
         'codigo_validacion',
+        'id_plataforma',
         'estatus'
     ];
 
