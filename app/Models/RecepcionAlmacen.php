@@ -26,6 +26,7 @@ class RecepcionAlmacen extends Model
         'estatus',
         'imei',
         'no_serie',
+        'tipo_envio',
         'guia',
     ];
 

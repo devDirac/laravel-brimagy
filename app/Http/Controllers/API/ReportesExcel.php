@@ -12,13 +12,15 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 class ReportesExcel extends BaseController
 {
-    public function __construct(private ReporteCanjesService $reporteCanjesService)
-    {
-    }
+    public function __construct(private ReporteCanjesService $reporteCanjesService) {}
 
     public function exportarExcel(Request $request)
     {
         try {
+            $request->validate([
+                'tipo_premio' => 'nullable|in:fisico,digital,ambos',
+            ]);
+
             $data = $this->reporteCanjesService->obtenerReporte($request);
 
             $spreadsheet = new Spreadsheet();
@@ -308,7 +310,14 @@ class ReportesExcel extends BaseController
             }
 
             $writer = new Xlsx($spreadsheet);
-            $fileName = 'reporte_canjes_' . now()->format('Ymd_His') . '.xlsx';
+            $tipo = $request->input('tipo_premio', 'ambos');
+            $sufijos = [
+                'fisico'  => '_fisicos',
+                'digital' => '_digitales',
+            ];
+            $sufijo = $sufijos[$tipo] ?? '';
+
+            $fileName = 'reporte_canjes' . $sufijo . '_' . now()->format('Ymd_His') . '.xlsx';
 
             return response()->streamDownload(function () use ($writer) {
                 $writer->save('php://output');

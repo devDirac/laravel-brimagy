@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Services\FolioCanjeResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -18,28 +19,20 @@ use Illuminate\Support\Facades\DB;
 
 class AlmacenController extends BaseController
 {
+    public function __construct(private FolioCanjeResolver $folioCanjeResolver) {}
     public function getProductosAlmacen(Request $request)
     {
         try {
-            $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
-            $plataformaModel = Plataformas::where('nombre', $plataforma)->first();
-            if (!$plataformaModel) {
-                return $this->sendError('La plataforma ' . $request->plataforma . ' no existe', 'error', 404);
-            }
-            $id_plataforma = $plataformaModel->id;
-
             $query = DB::table('dc_recepcion_almacen as ra')
                 ->select(
                     'ra.id',
                     'ra.id_canje',
                     'ra.id_usuario',
-                    'u.name as nombre_usuario',
-                    'u.first_last_name as primer_apellido',
-                    'u.second_last_name as segundo_apellido',
                     'ra.id_producto',
                     'cdp.nombre_producto',
                     'cdp.marca',
                     'cdp.sku',
+                    'cdp.id_plataforma',
                     'ra.id_proveedor',
                     'cp.nombre as nombre_proveedor',
                     'ra.id_orden_compra',
@@ -80,7 +73,6 @@ class AlmacenController extends BaseController
                     DB::raw('COALESCE(ra.id_proveedor, cdp.id_proveedor)')
                 )
                 ->leftJoin('dc_orden_compra as oc', 'ra.id_orden_compra', '=', 'oc.id')
-                ->leftJoin('users as u', 'ra.id_usuario', '=', 'u.id')
                 ->whereIn('ra.id', function ($sub) {
                     $sub->selectRaw('MIN(id)')
                         ->from('dc_recepcion_almacen')
@@ -91,9 +83,11 @@ class AlmacenController extends BaseController
                     $q->whereNull('ra.estatus')
                         ->orWhere('ra.estatus', '!=', 'entregado');
                 })
-                ->where('cdp.id_plataforma', $id_plataforma);
+                ->whereNotNull('cdp.id_plataforma');
 
-            $productosAlmacen = $query->orderBy('ra.created_at', 'desc')->get();
+            $productosAlmacen = $this->enriquecerCanjes(
+                $query->orderBy('ra.created_at', 'desc')->get()
+            );
 
             return $this->sendResponse($productosAlmacen);
         } catch (\Throwable $th) {
@@ -102,7 +96,6 @@ class AlmacenController extends BaseController
     }
     public function getProductoAlmacenPorId(Request $request)
     {
-        DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
                 'id_producto_almacen' => 'required|integer',
@@ -116,6 +109,7 @@ class AlmacenController extends BaseController
             $registro = DB::table('dc_recepcion_almacen')
                 ->where('id', $request->id_producto_almacen)
                 ->first();
+
             if (!$registro) {
                 return $this->sendError('Producto de almacén no encontrado', null, 404);
             }
@@ -125,7 +119,7 @@ class AlmacenController extends BaseController
                     'ra.id as id_producto_almacen',
                     'ra.id_canje',
                     'ra.id_usuario',
-                    'up.name as nombre_usuario',
+                    'up.name as nombre_usuario_registro',
                     'ra.id_producto',
                     'cp.nombre as nombre_proveedor',
                     'ra.id_proveedor',
@@ -134,6 +128,7 @@ class AlmacenController extends BaseController
                     'cdp.sku',
                     'cdp.costo_con_iva',
                     'cdp.costo_sin_iva',
+                    'cdp.id_plataforma',
                     'cdp2.nombre_producto as nombre_producto_nuevo',
                     'cdp2.marca as marca_nuevo',
                     'cdp2.sku as sku_nuevo',
@@ -151,15 +146,22 @@ class AlmacenController extends BaseController
                     'ra.imei',
                     'ra.no_serie',
                     'ea.evidencias',
+                    'ra.tipo_envio',
+                    DB::raw('COALESCE(ra.id_proveedor, cdp.id_proveedor) as id_proveedor_asignado'),
                     DB::raw('(
-            SELECT GROUP_CONCAT(CASE WHEN f.tipo_archivo = "pdf" THEN f.fecha_pago END)
-            FROM dc_facturas f
-            WHERE f.id_orden_compra = ra.id_orden_compra
-        ) as fecha_pago'),
+                    SELECT GROUP_CONCAT(CASE WHEN f.tipo_archivo = "pdf" THEN f.fecha_pago END)
+                    FROM dc_facturas f
+                    WHERE f.id_orden_compra = ra.id_orden_compra
+                ) as fecha_pago'),
                 )
                 ->leftJoin('dc_catalogo_productos as cdp', 'ra.id_producto', '=', 'cdp.id')
                 ->leftJoin('dc_catalogo_productos as cdp2', 'ra.id_producto_nuevo', '=', 'cdp2.id')
-                ->leftJoin('dc_catalogo_proveedores as cp', 'ra.id_proveedor', '=', 'cp.id')
+                ->leftJoin(
+                    'dc_catalogo_proveedores as cp',
+                    'cp.id',
+                    '=',
+                    DB::raw('COALESCE(ra.id_proveedor, cdp.id_proveedor)')
+                )
                 ->leftJoin('dc_orden_compra as oc', 'ra.id_orden_compra', '=', 'oc.id')
                 ->leftJoin('dc_usuarios_plataforma as up', 'ra.id_usuario', '=', 'up.id')
                 ->leftJoin('dc_evidencias_almacen as ea', 'ea.id_almacen_producto', '=', 'ra.id')
@@ -167,16 +169,19 @@ class AlmacenController extends BaseController
                 ->where('ra.id_producto', $registro->id_producto)
                 ->get();
 
+            // Plataforma, folio y datos del usuario del canje
             $base = $productos->sortBy('id_producto_almacen')->first();
+            $base = $this->enriquecerCanjes(collect([$base]))->first();
 
             $resultado = [
                 'id_producto_almacen' => $base->id_producto_almacen,
                 'id_canje' => $base->id_canje,
                 'id_usuario' => $base->id_usuario,
-                'nombre_usuario' => $base->nombre_usuario,
+                'nombre_usuario_registro' => $base->nombre_usuario_registro,
                 'id_producto' => $base->id_producto,
                 'nombre_producto' => $base->nombre_producto,
                 'nombre_proveedor' => $base->nombre_proveedor,
+                'id_proveedor' => $base->id_proveedor_asignado,
                 'marca' => $base->marca,
                 'sku' => $base->sku,
                 'costo_sin_iva' => $base->costo_sin_iva,
@@ -189,10 +194,32 @@ class AlmacenController extends BaseController
                 'fecha_pago' => $base->fecha_pago,
                 'evidencias' => $base->evidencias,
                 'guia' => $base->guia,
+                'tipo_envio' => $base->tipo_envio,
                 'imei' => $base->imei,
                 'no_serie' => $base->no_serie,
                 'folio_factura' => $base->folio_factura,
                 'comentarios' => $base->comentarios,
+
+                // Plataforma y canje
+                'plataforma' => $base->plataforma,
+                'plataforma_nombre' => $base->plataforma_nombre,
+                'folio_canje' => $base->folio_canje,
+
+                // Usuario que realizó el canje
+                'nombre_usuario' => $base->nombre_usuario,
+                'email' => $base->email,
+                'phone' => $base->phone,
+                'calle' => $base->calle,
+                'numero_calle' => $base->numero_calle,
+                'numero_interior' => $base->numero_interior,
+                'colonia' => $base->colonia,
+                'municipio' => $base->municipio,
+                'estado' => $base->estado,
+                'codigo_postal' => $base->codigo_postal,
+                'between_1' => $base->between_1,
+                'between_2' => $base->between_2,
+                'referencia_adicional' => $base->referencia_adicional,
+
                 // Total sumado de todos los registros
                 'cantidad_almacen' => $productos->sum('cantidad_almacen'),
 
@@ -201,7 +228,7 @@ class AlmacenController extends BaseController
                     ->filter(fn($p) => $p->cantidad_almacen > 0)
                     ->map(fn($p) => [
                         'id_producto_almacen' => $p->id_producto_almacen,
-                        'id_proveedor' => $p->id_proveedor,
+                        'id_proveedor' => $base->id_proveedor_asignado !== null ? (int) $base->id_proveedor_asignado : null,
                         'nombre_proveedor' => $p->nombre_proveedor,
                         'nombre_producto_nuevo' => $p->nombre_producto_nuevo ?? $p->nombre_producto,
                         'marca_nuevo' => $p->marca_nuevo ?? $p->marca,
@@ -220,8 +247,7 @@ class AlmacenController extends BaseController
 
             return $this->sendResponse($resultado);
         } catch (\Throwable $th) {
-            DB::rollBack();
-            return $this->sendError('Error al obtener el producto en almacen', $th, 500);
+            return $this->sendError('Error al obtener el producto en almacen', $th->getMessage(), 500);
         }
     }
     public function recibirProductoAlmacen(Request $request)
@@ -369,6 +395,11 @@ class AlmacenController extends BaseController
 
             $datosProducto = CatalogoProductos::where('id', $request->id_producto)->first();
 
+            if (!$datosProducto) {
+                DB::rollBack();
+                return $this->sendError('El producto no existe en el catálogo', 'error', 404);
+            }
+
             //datos del producto existente
             $nombre_producto = $datosProducto->nombre_producto;
             $descripcion = $datosProducto->descripcion;
@@ -395,38 +426,25 @@ class AlmacenController extends BaseController
             $id_plataforma = $datosProducto->id_plataforma;
             $tipo_producto = $datosProducto->tipo_producto;
 
-            if ($request->plataforma === "club_bohn") {
-                $producto_brimagy = ProductoClub::create([
-                    'desc' => $nombre_producto,
-                    'features' => $descripcion,
-                    'required_score' => $puntos,
-                    'sub_category_id' => $id_catalogo,
-                    'photo_name' => $foto_producto,
-                    'sku' => $sku,
-                    'TyC' => "",
-                    'validity' => "",
-                ]);
+            // La plataforma se toma del producto, no de la vista
+            $esClubBohn = Plataformas::where('id', $id_plataforma)->value('nombre') === 'club bohn';
+
+            $datosProductoPlataforma = [
+                'desc' => $nombre_producto,
+                'features' => $descripcion,
+                'required_score' => $puntos,
+                'sub_category_id' => $id_catalogo,
+                'photo_name' => $foto_producto,
+                'sku' => $sku,
+                'TyC' => "",
+                'validity' => "",
+            ];
+
+            if ($esClubBohn) {
+                $producto_brimagy = ProductoClub::create($datosProductoPlataforma);
             } else {
-                $producto_brimagy = ProductoBrimagy::create([
-                    'desc' => $nombre_producto,
-                    'features' => $descripcion,
-                    'required_score' => $puntos,
-                    'sub_category_id' => $id_catalogo,
-                    'photo_name' => $foto_producto,
-                    'sku' => $sku,
-                    'TyC' => "",
-                    'validity' => "",
-                ]);
-                ProductoLocal::create([
-                    'desc' => $nombre_producto,
-                    'features' => $descripcion,
-                    'required_score' => $puntos,
-                    'sub_category_id' => $id_catalogo,
-                    'photo_name' => $foto_producto,
-                    'sku' => $sku,
-                    'TyC' => "",
-                    'validity' => "",
-                ]);
+                $producto_brimagy = ProductoBrimagy::create($datosProductoPlataforma);
+                ProductoLocal::create($datosProductoPlataforma);
             }
 
             $producto = CatalogoProductos::create([
@@ -496,6 +514,7 @@ class AlmacenController extends BaseController
             $validator = Validator::make($request->all(), [
                 'id_producto_almacen' => 'required|integer',
                 'guia_producto' => 'required|string',
+                'tipo_envio' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -515,6 +534,7 @@ class AlmacenController extends BaseController
                 ->where('id_producto', $producto_almacen->id_producto)
                 ->update([
                     'guia' => $request->guia_producto,
+                    'tipo_envio' => $request->tipo_envio,
                     'estatus' => 'guia_asignada',
                 ]);
 
@@ -613,5 +633,24 @@ class AlmacenController extends BaseController
             DB::rollBack();
             return $this->sendError('Error al confirmar la recepción del producto', $th->getMessage(), 500);
         }
+    }
+    /**
+     * Agrega plataforma, folio y datos del usuario del canje.
+     * Requiere que cada registro traiga id_canje e id_plataforma.
+     */
+    private function enriquecerCanjes($registros)
+    {
+        $plataformas = Plataformas::pluck('nombre', 'id');
+
+        return $this->folioCanjeResolver
+            ->enriquecer($registros, $plataformas)
+            ->map(function ($r) {
+                // El resolver deja "plataforma" con el nombre ("club bohn");
+                // el front usa el slug ("club_bohn") para colores y acciones
+                $r->plataforma_nombre = $r->plataforma;
+                $r->plataforma = $r->plataforma ? str_replace(' ', '_', $r->plataforma) : null;
+                $r->folio_canje = $r->folio;
+                return $r;
+            });
     }
 }

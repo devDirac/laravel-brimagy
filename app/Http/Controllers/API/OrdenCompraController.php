@@ -31,6 +31,7 @@ use App\Services\FolioCanjeResolver;
 use App\Services\OrdenCompraService;
 use App\Services\WhatsAppService;
 use App\Services\CierreCanjesService;
+use App\Support\AgrupadorProductosOrden;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -79,6 +80,7 @@ class OrdenCompraController extends BaseController
                 'cdp.envio_base',
                 'cdp.costo_caja',
                 'cdp.envio_extra',
+                'cdp.tipo_producto',
                 'p.nombre as nombre_plataforma',
             ])
             ->keyBy('id');
@@ -461,6 +463,8 @@ class OrdenCompraController extends BaseController
     {
         try {
             $productos = array_values(json_decode($orden->productos_canje, true) ?: []);
+            $productos = AgrupadorProductosOrden::agrupar($productos)->all();
+
             $args = [$productos, $orden->id_proveedor, $orden->id_usuario, $orden->estatus, $orden->no_orden];
 
             if ($tipoEnvio === 'directo') {
@@ -636,6 +640,7 @@ class OrdenCompraController extends BaseController
             }
 
             $aceptados = $productosCombinados->where('estatus_proveedor', 1);
+            $productosAgrupados = AgrupadorProductosOrden::agrupar($productosCombinados);
 
             $respuesta = [
                 'orden_compra' => [
@@ -657,14 +662,14 @@ class OrdenCompraController extends BaseController
                     'telefono' => $ordenCompra->telefono,
                     'correo' => $ordenCompra->correo,
                 ],
-                'productos' => $productosCombinados,
+                'productos' => $productosAgrupados,
                 'totales' => [
                     'subtotal' => $aceptados->sum('subtotal'),
                     'iva' => $aceptados->sum('iva'),
                     'total' => $aceptados->sum('importe_total'),
                 ],
                 'estadisticas' => [
-                    'total_productos' => $productosCombinados->count(),
+                    'total_productos' => $productosAgrupados->count(),
                     'productos_aceptados' => $productosCombinados->where('estatus_proveedor', 1)->sum('cantidad_producto'),
                     'productos_rechazados' => $productosCombinados->where('estatus_proveedor', 2)->sum('cantidad_producto'),
                     'productos_pendientes' => $productosCombinados->where('estatus_proveedor', 0)->sum('cantidad_producto'),
@@ -689,8 +694,8 @@ class OrdenCompraController extends BaseController
     {
         $validator = Validator::make($request->all(), [
             'id_orden_compra' => 'required|integer',
-            'llave' => 'required_without:id_producto',
-            'id_producto' => 'required_without:llave|integer',
+            'ids_validacion' => 'required|array|min:1',
+            'ids_validacion.*' => 'required|integer|distinct',
             'motivo' => 'nullable|string|max:500',
         ]);
 
@@ -698,7 +703,7 @@ class OrdenCompraController extends BaseController
             return $this->sendError('El formato de datos no es válido.', $validator->errors());
         }
 
-        $llave = (string) ($request->llave ?? $request->id_producto);
+        $llaves = array_map('strval', $request->ids_validacion);
 
         DB::beginTransaction();
 
@@ -717,17 +722,27 @@ class OrdenCompraController extends BaseController
                 return $this->sendError('La orden ya fue enviada al proveedor, no se puede modificar.', null, 409);
             }
 
-            $productosCanje = json_decode($ordenCompra->productos_canje, true);
+            $productosCanje = json_decode($ordenCompra->productos_canje, true) ?: [];
 
-            if (!is_array($productosCanje) || !isset($productosCanje[$llave])) {
+            // Si alguna no pertenece a la orden, no se aplica nada
+            $faltantes = array_diff($llaves, array_map('strval', array_keys($productosCanje)));
+            if (!empty($faltantes)) {
                 DB::rollBack();
-                return $this->sendError('No se encontró el producto en esta orden de compra.', null, 404);
+                return $this->sendError(
+                    'Uno o más productos no pertenecen a esta orden de compra.',
+                    ['ids_validacion' => array_values($faltantes)],
+                    404
+                );
             }
 
-            $productosCanje[$llave]['estatus_proveedor'] = $nuevoEstatus;
+            foreach ($llaves as $llave) {
+                $productosCanje[$llave]['estatus_proveedor'] = $nuevoEstatus;
 
-            if ($nuevoEstatus === 2) {
-                $productosCanje[$llave]['motivo_rechazo'] = $request->motivo ?? '';
+                if ($nuevoEstatus === 2) {
+                    $productosCanje[$llave]['motivo_rechazo'] = $request->motivo ?? '';
+                } else {
+                    unset($productosCanje[$llave]['motivo_rechazo']);
+                }
             }
 
             $ordenCompra->productos_canje = json_encode($productosCanje, JSON_FORCE_OBJECT);
@@ -735,15 +750,21 @@ class OrdenCompraController extends BaseController
 
             DB::commit();
 
+            $actualizados = array_values(array_intersect_key($productosCanje, array_flip($llaves)));
+
             return $this->sendResponse([
                 'orden_compra' => $ordenCompra,
-                'producto_actualizado' => $productosCanje[$llave],
-            ], "Producto {$accion} exitosamente.");
+                'productos_actualizados' => $actualizados,
+                'producto_agrupado' => AgrupadorProductosOrden::agrupar($actualizados)->first(),
+            ], count($llaves) > 1
+                ? count($llaves) . " registros {$accion}s exitosamente."
+                : "Producto {$accion} exitosamente.");
         } catch (\Throwable $th) {
             DB::rollBack();
             return $this->sendError("Error al marcar el producto como {$accion}", $th->getMessage(), 500);
         }
     }
+
     public function enviarOCAprobacion(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -921,8 +942,10 @@ class OrdenCompraController extends BaseController
 
         if (!empty($productosParaEnvio)) {
             try {
-                $this->enviarWhatsApp($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
-                $this->enviarCorreo($productosParaEnvio, $proveedor->id, null, $estado, $orden_compra->no_orden);
+                $productosAgrupados = AgrupadorProductosOrden::agrupar($productosParaEnvio)->all();
+
+                $this->enviarWhatsApp($productosAgrupados, $proveedor->id, null, $estado, $orden_compra->no_orden);
+                $this->enviarCorreo($productosAgrupados, $proveedor->id, null, $estado, $orden_compra->no_orden);
             } catch (\Throwable $th) {
                 Log::error("Error al notificar la orden {$orden_compra->no_orden}: " . $th->getMessage());
             }

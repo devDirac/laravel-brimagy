@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\DB;
 class ReporteCanjesService
 {
 
+    private const TIPOS_PREMIO = [
+        'fisico'  => 'fisico',
+        'digital' => 'digital',
+    ];
+
+    private const COLUMNA_TIPO_PREMIO = 'tipo_producto';
+
     public function obtenerReporte(Request $request): array
     {
         $plataforma = $request->plataforma === 'club_bohn' ? 'club bohn' : $request->plataforma;
@@ -103,6 +110,7 @@ class ReporteCanjesService
             ->where('cdp.id_plataforma', $id_plataforma);
 
         $this->aplicarFiltroFechas($query, $request, 'sv.created_at');
+        $this->aplicarFiltroTipoPremio($query, $request, 'cdp');
 
         $reporte = $query->orderBy('sv.created_at', 'desc')->get();
 
@@ -184,9 +192,13 @@ class ReporteCanjesService
 
         $awardIds = $swaps->pluck('award_id')->filter()->unique()->values();
 
-        $catalogo = DB::table('dc_catalogo_productos as cdp')
+        $catalogoQuery = DB::table('dc_catalogo_productos as cdp')
             ->where('cdp.id_plataforma', $id_plataforma)
-            ->whereIn('cdp.id_producto_brimagy', $awardIds)
+            ->whereIn('cdp.id_producto_brimagy', $awardIds);
+
+        $this->aplicarFiltroTipoPremio($catalogoQuery, $request, 'cdp');
+
+        $catalogo = $catalogoQuery
             ->select(
                 'cdp.id',
                 'cdp.id_producto_brimagy',
@@ -200,6 +212,14 @@ class ReporteCanjesService
             )
             ->get()
             ->keyBy('id_producto_brimagy');
+
+        if ($this->tipoPremioSolicitado($request) !== null) {
+            $swaps = $swaps->filter(fn($s) => $catalogo->has($s->award_id))->values();
+
+            if ($swaps->isEmpty()) {
+                return ['detalle' => collect(), 'totales' => []];
+            }
+        }
 
         $swapIds = $swaps->pluck('id')->unique()->values();
 
@@ -304,7 +324,20 @@ class ReporteCanjesService
         ];
     }
 
+    /** Devuelve el valor a filtrar, o null si se piden ambos */
+    private function tipoPremioSolicitado(Request $request): ?string
+    {
+        $tipo = $request->input('tipo_premio', 'ambos');
+        return self::TIPOS_PREMIO[$tipo] ?? null;
+    }
 
+    private function aplicarFiltroTipoPremio($query, Request $request, string $alias = 'cdp'): void
+    {
+        $tipo = $this->tipoPremioSolicitado($request);
+        if ($tipo !== null) {
+            $query->where("{$alias}." . self::COLUMNA_TIPO_PREMIO, $tipo);
+        }
+    }
     private function aplicarFiltroFechas($query, Request $request, string $columna): void
     {
         if ($request->filled('fecha_inicio')) {
