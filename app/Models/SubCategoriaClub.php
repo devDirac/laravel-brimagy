@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SubCategoriaClub extends Model
 {
@@ -21,4 +22,9 @@ class SubCategoriaClub extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    public function categoria(): BelongsTo
+    {
+        return $this->belongsTo(CategoriaClub::class, 'category_id');
+    }
 }

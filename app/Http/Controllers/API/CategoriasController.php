@@ -105,35 +105,32 @@ class CategoriasController extends BaseController
     public function getCategoriasPrincipal(Request $request)
     {
         try {
+            $modelo = $request->plataforma === "club_bohn" ? CategoriaClub::class : CatalogoCategoria::class;
 
-            $categorias = collect();
-            if ($request->plataforma === "club_bohn") {
-                $categorias = CategoriaClub::orderBy('id', 'desc')->get();
-            } else {
-                $categorias = CatalogoCategoria::orderBy('id', 'desc')->get();
-            }
-
+            $categorias = $modelo::where('status', 'ACTIVE')
+                ->orderBy('id', 'desc')
+                ->get();
 
             return $this->sendResponse($categorias);
         } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener las categorías', $th, 500);
+            return $this->sendError('Error al obtener las categorías', $th->getMessage(), 500);
         }
     }
     public function getCategorias(Request $request)
     {
         try {
-            $categorias = collect();
-            if ($request->plataforma === "club_bohn") {
-                $categorias = SubCategoriaClub::orderBy('id', 'desc')->get();
-            } else {
-                $categorias = SubCategoria::orderBy('id', 'desc')->get();
-            }
+            $modelo = $request->plataforma === "club_bohn" ? SubCategoriaClub::class : SubCategoria::class;
+
+            $categorias = $modelo::with('categoria:id,desc,file_path')
+                ->orderBy('id', 'desc')
+                ->get();
 
             return $this->sendResponse($categorias);
         } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener las categorías', $th, 500);
+            return $this->sendError('Error al obtener las categorías', $th->getMessage(), 500);
         }
     }
+
     public function editarCategoria(Request $request)
     {
         DB::beginTransaction();
