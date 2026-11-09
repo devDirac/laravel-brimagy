@@ -6,13 +6,6 @@ use App\Exceptions\RecursoNoEncontradoException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Operaciones de recursos remotos que son iguales en todas las plataformas.
- * Cada plataforma solo declara sus modelos en MODELOS (ver modelosRemotos()).
- *
- * Espejos: el resto del sistema busca la copia local con el mismo id que el registro
- * principal (ej. ColoresLocal::find($idColorBrimagy)), así que las copias se crean con ese id.
- */
 trait ReflejaRegistrosRemotos
 {
     public function modelosRemotos(string $recurso): array
@@ -80,7 +73,6 @@ trait ReflejaRegistrosRemotos
         }
     }
 
-    /** Crea la copia con el mismo id del principal; si ese id ya está ocupado, la crea con uno nuevo y lo reporta. */
     private function crearEspejo(string $clase, Model $principal, array $datos): void
     {
         if (!$clase::whereKey($principal->getKey())->exists()) {
@@ -97,10 +89,6 @@ trait ReflejaRegistrosRemotos
         $clase::create($datos);
     }
 
-    /**
-     * Copia con el mismo id del principal. Si los dos tienen award_id y no coincide,
-     * no es la copia de ese registro (espejo desincronizado) y no se toca.
-     */
     private function buscarEspejo(string $clase, Model $principal): ?Model
     {
         $copia = $clase::find($principal->getKey());

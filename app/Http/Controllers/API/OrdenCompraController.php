@@ -81,6 +81,7 @@ class OrdenCompraController extends BaseController
                 'cdp.costo_caja',
                 'cdp.envio_extra',
                 'cdp.tipo_producto',
+                'cdp.id_plataforma',  
                 'p.nombre as nombre_plataforma',
             ])
             ->keyBy('id');

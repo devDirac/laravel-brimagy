@@ -6,7 +6,7 @@ use App\Models\CatalogoProductos;
 use App\Models\FotosProducto;
 use App\Services\Plataformas\PlataformaCatalogo;
 
-/** Fotos adicionales del producto: van en la carpeta de su categoría. */
+/** Fotos adicionales del producto */
 class FotoProducto extends RecursoProducto implements SubeArchivos
 {
     public function claveRemota(): ?string { return PlataformaCatalogo::FOTOS; }

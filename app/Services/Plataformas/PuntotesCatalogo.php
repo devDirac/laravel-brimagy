@@ -20,7 +20,7 @@ use App\Models\TallasLocal;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Puntotes guarda todo dos veces: en la BD de Brimagy (principal) y en su copia local (espejo).
+ * Puntotes guarda todo dos veces: en la BD de Brimagy (principal) y en su copia local.
  */
 class PuntotesCatalogo implements PlataformaCatalogo
 {

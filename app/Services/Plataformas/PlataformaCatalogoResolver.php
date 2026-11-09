@@ -34,7 +34,6 @@ class PlataformaCatalogoResolver
 
     /**
      * Por el parámetro `plataforma` que manda el frontend ("club_bohn", "puntotes"…).
-     * Igual que antes: todo lo que no sea club bohn se trata como puntotes.
      */
     public function desdeParametro(?string $plataforma): PlataformaCatalogo
     {

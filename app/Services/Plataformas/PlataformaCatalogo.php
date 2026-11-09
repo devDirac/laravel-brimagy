@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 interface PlataformaCatalogo
 {
-    /** Claves de los recursos que viven en la BD de la plataforma (ver modelosRemotos). */
+    /** Claves de los recursos que viven en la BD de la plataforma. */
     const COLORES = 'colores';
     const TALLAS = 'tallas';
     const MONTOS = 'montos';

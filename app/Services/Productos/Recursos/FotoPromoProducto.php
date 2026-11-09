@@ -6,7 +6,7 @@ use App\Models\CatalogoProductos;
 use App\Models\FotosOfertas;
 use App\Services\Plataformas\PlataformaCatalogo;
 
-/** Fotos promocionales (ofertas): todas van a la carpeta Ofertas del FTP. */
+/** Fotos promocionales (ofertas) */
 class FotoPromoProducto extends RecursoProducto implements SubeArchivos
 {
     const CARPETA_FTP = 'Ofertas';

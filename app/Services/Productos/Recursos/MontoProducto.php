@@ -12,7 +12,6 @@ class MontoProducto extends RecursoProducto
     public function modeloLocal(): string { return Montos::class; }
     public function campoId(): string { return 'id_monto'; }
     public function campoIdRemoto(): ?string { return 'id_monto_brimagy'; }
-    /** En la plataforma, puntos se llama points. */
     public function campos(): array
     {
         return ['monto' => 'monto', 'puntos' => 'points', 'descripcion' => 'descripcion'];

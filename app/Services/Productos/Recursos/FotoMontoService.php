@@ -12,8 +12,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 
 /**
- * Foto (gif) de los montos de un producto digital. Hay una sola por producto:
- * subir una nueva reemplaza la anterior.
+ * Foto (gif) de los montos de un producto digital
  */
 class FotoMontoService
 {
@@ -56,8 +55,6 @@ class FotoMontoService
                 $ruta = $this->ftp->subir($archivo, self::CARPETA_FTP, $nombre, 'foto_monto/' . $producto->id);
 
                 if ($existente) {
-                    // La versión anterior se borra después del commit, y solo si tenía otra ruta
-                    // (con el mismo nombre ya quedó sobrescrita y borrarla eliminaría la nueva)
                     if ($existente->url_foto && $existente->url_foto !== $ruta) {
                         $this->ftp->programarBorradoPrivado($existente->url_foto);
                     }

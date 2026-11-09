@@ -67,11 +67,9 @@ class FotosRecursoService
         $idPremio = $producto->id_producto_brimagy ?: $this->idOpcional($datos['id_producto_brimagy'] ?? null);
         $modelo = $recurso->modeloLocal();
 
-        // Antes no había transacción: si fallaba la tercera foto, las dos primeras quedaban a medias
         $this->transacciones->en($plataforma->conexiones(), function () use ($recurso, $datos, $campo, $plataforma, $carpetaFtp, $producto, $idPremio, $modelo) {
             $usados = [];
             foreach ($datos[$campo] as $archivo) {
-                /** @var UploadedFile $archivo */
                 $nombre = $this->nombreSinRepetir($archivo, $usados);
                 $ruta = $this->ftp->subir($archivo, $carpetaFtp, $nombre, $recurso->carpetaPrivada());
 
