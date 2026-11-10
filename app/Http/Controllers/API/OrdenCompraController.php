@@ -45,7 +45,66 @@ class OrdenCompraController extends BaseController
     {
         $this->whatsappService = new WhatsAppService();
     }
+    /**
+     * Agrega a cada línea agrupada el detalle por canje: folio, plataforma y cantidad.
+     * Toma los datos de las filas sin agrupar; solo consulta los folios.
+     */
+    private function agregarDesglose(Collection $agrupados, Collection $combinados): Collection
+    {
+        $porValidacion = $combinados->keyBy('id_validacion');
+        $folios = $this->foliosPorPlataforma($combinados);
 
+        return $agrupados->map(function ($p) use ($porValidacion, $folios) {
+            $ids = data_get($p, 'ids_validacion') ?: [data_get($p, 'id_validacion')];
+
+            $desglose = collect($ids)
+                ->map(fn($id) => $porValidacion->get($id))
+                ->filter()
+                ->map(fn($f) => [
+                    'id_validacion' => data_get($f, 'id_validacion'),
+                    'id_canje' => data_get($f, 'id_canje'),
+                    'folio' => $folios[data_get($f, 'id_plataforma')][data_get($f, 'id_canje')] ?? null,
+                    'id_plataforma' => data_get($f, 'id_plataforma'),
+                    'plataforma' => data_get($f, 'nombre_plataforma'),
+                    'cantidad' => (int) data_get($f, 'cantidad_producto'),
+                ])
+                ->values()
+                ->all();
+
+            data_set($p, 'desglose', $desglose);
+            return $p;
+        });
+    }
+
+    /**
+     * Folios por plataforma: [id_plataforma => [id_canje => folio]].
+     */
+    private function foliosPorPlataforma(Collection $filas): array
+    {
+        return $filas
+            ->groupBy(fn($f) => data_get($f, 'id_plataforma'))
+            ->map(
+                fn($grupo) => $this->conexionCanjes(data_get($grupo->first(), 'nombre_plataforma'))
+                    ->table('swaps_view')
+                    ->whereIn('id', $grupo->pluck('id_canje')->unique()->values())
+                    ->distinct()
+                    ->pluck('folio', 'id')
+                    ->all()
+            )
+            ->all();
+    }
+
+    /** Conexión de BD donde viven los canjes de una plataforma */
+    private function conexionCanjes(string $plataforma)
+    {
+        $conexion = config("plataformas.conexiones_canjes.{$plataforma}");
+
+        if (!$conexion) {
+            throw new \RuntimeException("No hay conexión configurada para la plataforma \"{$plataforma}\"");
+        }
+
+        return DB::connection($conexion);
+    }
     /**
      * Combina las líneas de productos_canje con el catálogo y su validación.
      */
@@ -56,7 +115,8 @@ class OrdenCompraController extends BaseController
                 $linea['_llave'] = (string) $llave;
                 $linea['id_producto'] = $linea['id_producto'] ?? (int) $llave;
                 return $linea;
-            });
+            })
+            ->reject(fn($linea) => (int) ($linea['estatus_proveedor'] ?? 0) === CierreCanjesService::ESTATUS_DESCARTADO);
 
         if ($lineas->isEmpty()) {
             return collect();
@@ -81,6 +141,7 @@ class OrdenCompraController extends BaseController
                 'cdp.costo_caja',
                 'cdp.envio_extra',
                 'cdp.tipo_producto',
+                'cdp.id_plataforma',
                 'p.nombre as nombre_plataforma',
             ])
             ->keyBy('id');
@@ -370,7 +431,7 @@ class OrdenCompraController extends BaseController
                     'oc.no_orden',
                     'oc.estatus as estado_orden',
                     'oc.created_at as fecha_creacion',
-                    DB::raw('JSON_LENGTH(oc.productos_canje) as total_productos')
+                    'oc.productos_canje'
                 )
                 ->when(
                     $sinProveedor,
@@ -383,7 +444,15 @@ class OrdenCompraController extends BaseController
                         ->orWhere('oc.estatus', 'LIKE', "%{$search}%"));
                 })
                 ->orderBy('oc.created_at', 'desc')
-                ->get();
+                ->get()
+                ->map(function ($oc) {
+                    $oc->total_productos = collect(json_decode($oc->productos_canje ?? '', true) ?: [])
+                        ->reject(fn($l) => (int) ($l['estatus_proveedor'] ?? 0) === CierreCanjesService::ESTATUS_DESCARTADO)
+                        ->count();
+
+                    unset($oc->productos_canje);
+                    return $oc;
+                });
 
             return $this->sendResponse($ordenes_compra);
         } catch (\Throwable $th) {
@@ -640,6 +709,7 @@ class OrdenCompraController extends BaseController
 
             $aceptados = $productosCombinados->where('estatus_proveedor', 1);
             $productosAgrupados = AgrupadorProductosOrden::agrupar($productosCombinados);
+            $productosAgrupados = $this->agregarDesglose($productosAgrupados, $productosCombinados);
 
             $respuesta = [
                 'orden_compra' => [
@@ -848,7 +918,7 @@ class OrdenCompraController extends BaseController
                 ->pluck('telefono')
                 ->unique();
 
-            $url = config('app.url_frontend') . '/generar-orden-compra';
+            $url = config('app.url_frontend') . '/generar-orden-de-compra';
 
             $mensaje = "📋 *Cotización pendiente de revisión*\n\n{$detalle}\n\n🔗 Revísala en:\n{$url}";
 

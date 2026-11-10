@@ -16,6 +16,7 @@ class ValidacionCanje extends Model
         'cantidad_producto',
         'id_proveedor',
         'no_orden',
+        'fecha_reasignacion',
         'fecha_validacion',
         'codigo_validacion',
         'id_plataforma',

@@ -44,7 +44,7 @@ class CanjesController extends BaseController
             ->filter(fn($p) => in_array((int) $p->award_id, $awardIds, true))
             ->values();
 
-        $canje->premios      = $canje->productos->pluck('nombre')->filter()->implode(', ');
+        $canje->premios = $canje->productos->pluck('nombre')->filter()->implode(', ');
         $canje->puntos_total = $canje->productos->sum('puntos');
 
         return $canje;
@@ -75,7 +75,11 @@ class CanjesController extends BaseController
 
         return $filas
             ->groupBy('id')
-            ->filter(fn($grupo) => $grupo->contains('tipo_producto', $tipo))
+            ->filter(
+                fn($grupo) =>
+                    $grupo->contains('tipo_producto', $tipo)
+                    || $grupo->every(fn($f) => $f->id_producto === null)
+            )
             ->flatMap(fn($grupo) => $grupo->filter(
                 fn($f) => $f->tipo_producto === $tipo || $f->id_producto === null
             ))
@@ -121,9 +125,9 @@ class CanjesController extends BaseController
     public function enviarValidacion(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id'                         => 'required|integer',
-            'productos'                  => 'required|array|min:1',
-            'productos.*.id_producto'    => 'required|integer',
+            'id' => 'required|integer',
+            'productos' => 'required|array|min:1',
+            'productos.*.id_producto' => 'required|integer',
             'productos.*.number_of_awards' => 'required|integer',
         ]);
 
@@ -144,9 +148,9 @@ class CanjesController extends BaseController
                 $this->registrarProductos($request, $user->id, $id_plataforma);
 
                 BitacoraEventos::create([
-                    'evento'      => 'Creación de validación de cliente',
+                    'evento' => 'Creación de validación de cliente',
                     'descripcion' => "El usuario con id: {$user->id} envió un mensaje para validar el canje: {$request->id}",
-                    'id_usuario'  => $user->id,
+                    'id_usuario' => $user->id,
                 ]);
             });
         } catch (\Throwable $th) {
@@ -221,232 +225,181 @@ class CanjesController extends BaseController
     public function getCanjes(Request $request)
     {
         try {
-
-            if ($request->has('plataforma') && $request->plataforma === "club_bohn") {
-                return $this->getCanjesClubBohn($request);
-            }
-
-            $idPuntotes = Plataformas::where('nombre', 'puntotes')->value('id');
-
-            //puntotes
-            $query = DB::table('swaps_view as sp')
-                ->leftJoin('dc_validacion_canje as vc', function ($join) use ($idPuntotes) {
-                    $join->on('vc.id_canje', '=', 'sp.id')
-                        ->whereRaw(
-                            'vc.id = (SELECT MAX(id) FROM dc_validacion_canje WHERE id_canje = sp.id AND id_plataforma = ?)',
-                            [$idPuntotes]
-                        );
-                })
-                ->leftJoin('dc_catalogo_productos as cdp', function ($join) use ($idPuntotes) {
-                    $join->on('sp.award_id', '=', 'cdp.id_producto_brimagy')
-                        ->where('cdp.id_plataforma', '=', $idPuntotes);
-                })
-                ->select(
-                    'sp.id',
-                    'sp.folio',
-                    'sp.name as nombre_usuario',
-                    'sp.email',
-                    'sp.phone',
-                    'sp.number_of_awards',
-                    'sp.size',
-                    'sp.color',
-                    'sp.category',
-                    'sp.points_swap as puntos_canjeados',
-                    'sp.desc as nombre_premio',
-                    'sp.required_score as costo_premio',
-                    'sp.sku',
-                    'sp.street as calle',
-                    'sp.number as numero_calle',
-                    'sp.colony as colonia',
-                    'sp.postal_code as codigo_postal',
-                    'sp.municipality as municipio',
-                    'sp.inside as numero_interior',
-                    'sp.between_1',
-                    'sp.between_2',
-                    'sp.additional_reference as referencia_adicional',
-                    'sp.created_at as creacion_canje',
-                    'sp.status as estado_canje',
-                    'cdp.id as id_producto',
-                    'cdp.id_proveedor',
-                    'cdp.sku as sku_catalogo',
-                    'vc.estatus as estado_validacion',
-                    'sp.award_id',
-                    'cdp.tipo_producto'
-                );
-            //->where('cdp.tipo_producto', $request->tipo_producto);
-
-            // BÚSQUEDA
-            if ($request->has('search') && !empty($request->search)) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")
-                        ->orWhere('vc.estatus', 'LIKE', "%{$search}%");
-                });
-            }
-
-            // BÚSQUEDA POR FECHAS
-            if (
-                $request->has('fecha1') && !empty($request->fecha1) &&
-                $request->has('fecha2') && !empty($request->fecha2)
-            ) {
-                $fecha1 = Carbon::parse($request->fecha1);
-                $fecha2 = Carbon::parse($request->fecha2);
-
-                if ($fecha1->lt($fecha2)) {
-                    $inicio = $fecha1->copy()->startOfDay();
-                    $fin = $fecha2->copy()->endOfDay();
-                } else {
-                    $inicio = $fecha2->copy()->startOfDay();
-                    $fin = $fecha1->copy()->endOfDay();
-                }
-
-                $query->whereBetween('sp.created_at', [$inicio, $fin]);
-            }
-
-            $canjes = $query->orderBy('sp.created_at', 'desc')->get();
-
-            return $this->sendResponse(
-                $this->filtrarPorTipoProducto($canjes, $request->tipo_producto)
-            );
+            return $this->sendResponse($this->consultarCanjes($request));
         } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los canjes', $th, 500);
+            return $this->sendError('Error al obtener los canjes', $th->getMessage(), 500);
         }
     }
-    private function getCanjesClubBohn(Request $request)
+    /**
+     * Conteo de canjes por estatus de validación (un canje = un id, sin importar cuántos productos tenga).
+     */
+    public function getResumenCanjes(Request $request)
     {
         try {
-            // es club bohn
-            $plataformaModel = Plataformas::where('nombre', 'club bohn')->first();
-            if (!$plataformaModel) {
-                return $this->sendError('La plataforma "club bohn" no existe', 'error', 404);
-            }
-            $id_plataforma = $plataformaModel->id;
+            $estados = $this->consultarCanjes($request)
+                ->groupBy('id')
+                ->map(fn($filas) => strtolower((string) $filas->first()->estado_validacion));
 
-            $query = DB::connection('mysql_club_bohn')
-                ->table('swaps_view as sp')
-                ->select(
-                    'sp.id',
-                    'sp.folio',
-                    'sp.name as nombre_usuario',
-                    'sp.email',
-                    'sp.phone',
-                    'sp.number_of_awards',
-                    'sp.size',
-                    'sp.color',
-                    'sp.category',
-                    'sp.points_swap as puntos_canjeados',
-                    'sp.desc as nombre_premio',
-                    'sp.required_score as costo_premio',
-                    'sp.sku',
-                    'sp.street as calle',
-                    'sp.number as numero_calle',
-                    'sp.colony as colonia',
-                    'sp.postal_code as codigo_postal',
-                    'sp.municipality as municipio',
-                    'sp.inside as numero_interior',
-                    'sp.between_1',
-                    'sp.between_2',
-                    'sp.additional_reference as referencia_adicional',
-                    'sp.created_at as creacion_canje',
-                    'sp.status as estado_canje',
-                    'sp.award_id'
-                );
+            $total = $estados->count();
+            $validados = $estados->filter(fn($e) => $e === 'identidad_validada')->count();
+            $sinValidar = $estados->filter(fn($e) => $e === '')->count();
 
-            if ($request->has('search') && !empty($request->search)) {
-                $search = $request->search;
-                $query->where(function ($q) use ($search) {
-                    $q->where('sp.folio', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                        ->orWhere('sp.points_swap', 'LIKE', "%{$search}%");
-                });
-            }
-
-            // BÚSQUEDA POR FECHAS
-            if (
-                $request->has('fecha1') && !empty($request->fecha1) &&
-                $request->has('fecha2') && !empty($request->fecha2)
-            ) {
-                $fecha1 = Carbon::parse($request->fecha1);
-                $fecha2 = Carbon::parse($request->fecha2);
-
-                if ($fecha1->lt($fecha2)) {
-                    $inicio = $fecha1->copy()->startOfDay();
-                    $fin = $fecha2->copy()->endOfDay();
-                } else {
-                    $inicio = $fecha2->copy()->startOfDay();
-                    $fin = $fecha1->copy()->endOfDay();
-                }
-
-                $query->whereBetween('sp.created_at', [$inicio, $fin]);
-            }
-
-            $swaps = $query->orderBy('sp.created_at', 'desc')->get();
-
-            if ($swaps->isEmpty()) {
-                return $this->sendResponse(collect());
-            }
-
-            $awardIds = $swaps->pluck('award_id')->filter()->unique()->values();
-
-            $catalogo = DB::table('dc_catalogo_productos as cdp')
-                ->where('cdp.id_plataforma', $id_plataforma)
-                ->whereIn('cdp.id_producto_brimagy', $awardIds)
-                ->select('cdp.id', 'cdp.id_proveedor', 'cdp.sku', 'cdp.id_producto_brimagy', 'cdp.tipo_producto')
-                ->get()
-                ->keyBy('id_producto_brimagy');
-
-            $swapIds = $swaps->pluck('id')->unique()->values();
-
-            $validaciones = DB::table('dc_validacion_canje')
-                ->whereIn('id_canje', $swapIds)
-                ->orderBy('id', 'desc')
-                ->get()
-                ->groupBy('id_canje')
-                ->map(fn($grupo) => $grupo->first());
-
-            $canjes = $swaps
-                ->map(function ($swap) use ($catalogo, $validaciones) {
-                    $producto = $catalogo->get($swap->award_id);
-                    $validacion = $validaciones->get($swap->id);
-
-                    return (object) array_merge((array) $swap, [
-                        'id_producto'       => $producto->id ?? null,
-                        'id_proveedor'      => $producto->id_proveedor ?? null,
-                        'sku_catalogo'      => $producto->sku ?? null,
-                        'tipo_producto'     => $producto->tipo_producto ?? null,
-                        'estado_validacion' => $validacion->estatus ?? null,
-                    ]);
-                })
-                ->values();
-
-            if ($request->has('search') && !empty($request->search)) {
-                $search = $request->search;
-                $yaCoincidePorOtroCampo = $canjes->contains(function ($c) use ($search) {
-                    return stripos($c->folio, $search) !== false
-                        || stripos($c->nombre_premio, $search) !== false
-                        || stripos($c->email, $search) !== false
-                        || stripos($c->sku, $search) !== false
-                        || stripos((string) $c->puntos_canjeados, $search) !== false;
-                });
-
-                if (!$yaCoincidePorOtroCampo) {
-                    $canjes = $canjes->filter(fn($c) => stripos((string) $c->estado_validacion, $search) !== false)
-                        ->values();
-                }
-            }
-
-            $canjes = $this->filtrarPorTipoProducto($canjes, $request->tipo_producto);
-
-            return $this->sendResponse($canjes);
+            return $this->sendResponse([
+                'total' => $total,
+                'validados' => $validados,
+                'sin_validar' => $sinValidar,
+                'en_proceso' => $total - $validados - $sinValidar,
+            ]);
         } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los canjes de club bohn', $th, 500);
+            return $this->sendError('Error al obtener el resumen de canjes', $th->getMessage(), 500);
         }
+    }
+
+    private function consultarCanjes(Request $request): Collection
+    {
+        $filas = $request->plataforma === 'club_bohn'
+            ? $this->consultarCanjesClubBohn($request)
+            : $this->consultarCanjesPuntotes($request);
+
+        return $this->filtrarPorTipoProducto($filas, $request->tipo_producto);
+    }
+
+    private function aplicarFiltroFechas($query, Request $request): void
+    {
+        if (empty($request->fecha1) || empty($request->fecha2)) {
+            return;
+        }
+
+        $fecha1 = Carbon::parse($request->fecha1);
+        $fecha2 = Carbon::parse($request->fecha2);
+        [$inicio, $fin] = $fecha1->lt($fecha2) ? [$fecha1, $fecha2] : [$fecha2, $fecha1];
+
+        $query->whereBetween('sp.created_at', [
+            $inicio->copy()->startOfDay(),
+            $fin->copy()->endOfDay(),
+        ]);
+    }
+
+    private function consultarCanjesPuntotes(Request $request): Collection
+    {
+        $idPuntotes = Plataformas::where('nombre', 'puntotes')->value('id');
+
+        $query = DB::table('swaps_view as sp')
+            ->leftJoin('dc_validacion_canje as vc', function ($join) use ($idPuntotes) {
+                $join->on('vc.id_canje', '=', 'sp.id')
+                    ->whereRaw(
+                        'vc.id = (SELECT MAX(id) FROM dc_validacion_canje WHERE id_canje = sp.id AND id_plataforma = ?)',
+                        [$idPuntotes]
+                    );
+            })
+            ->leftJoin('dc_catalogo_productos as cdp', function ($join) use ($idPuntotes) {
+                $join->on('sp.award_id', '=', 'cdp.id_producto_brimagy')
+                    ->where('cdp.id_plataforma', '=', $idPuntotes);
+            })
+            ->select(array_merge($this->columnasCanje(), [
+                'cdp.id as id_producto',
+                'cdp.id_proveedor',
+                'cdp.sku as sku_catalogo',
+                'cdp.tipo_producto',
+                'vc.estatus as estado_validacion',
+            ]));
+
+        if (!empty($request->search)) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('sp.folio', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.desc', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.email', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.sku', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")
+                    ->orWhere('vc.estatus', 'LIKE', "%{$search}%");
+            });
+        }
+
+        $this->aplicarFiltroFechas($query, $request);
+
+        return $query->orderBy('sp.created_at', 'desc')->get();
+    }
+
+    private function consultarCanjesClubBohn(Request $request): Collection
+    {
+        $id_plataforma = Plataformas::where('nombre', 'club bohn')->value('id');
+        if (!$id_plataforma) {
+            throw new \RuntimeException('La plataforma "club bohn" no existe');
+        }
+
+        $query = DB::connection('mysql_club_bohn')
+            ->table('swaps_view as sp')
+            ->select($this->columnasCanje());
+
+        if (!empty($request->search)) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('sp.folio', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.desc', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.email', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.sku', 'LIKE', "%{$search}%")
+                    ->orWhere('sp.points_swap', 'LIKE', "%{$search}%");
+            });
+        }
+
+        $this->aplicarFiltroFechas($query, $request);
+
+        $swaps = $query->orderBy('sp.created_at', 'desc')->get();
+
+        if ($swaps->isEmpty()) {
+            return collect();
+        }
+
+        $catalogo = DB::table('dc_catalogo_productos')
+            ->where('id_plataforma', $id_plataforma)
+            ->whereIn('id_producto_brimagy', $swaps->pluck('award_id')->filter()->unique())
+            ->select('id', 'id_proveedor', 'sku', 'id_producto_brimagy', 'tipo_producto')
+            ->get()
+            ->keyBy('id_producto_brimagy');
+
+        // Última validación de cada canje, SOLO de club bohn
+        $validaciones = DB::table('dc_validacion_canje')
+            ->where('id_plataforma', $id_plataforma)
+            ->whereIn('id_canje', $swaps->pluck('id')->unique())
+            ->orderBy('id', 'desc')
+            ->get()
+            ->groupBy('id_canje')
+            ->map(fn($grupo) => $grupo->first());
+
+        $canjes = $swaps->map(function ($swap) use ($catalogo, $validaciones) {
+            $producto = $catalogo->get($swap->award_id);
+            $validacion = $validaciones->get($swap->id);
+
+            return (object) array_merge((array) $swap, [
+                'id_producto' => $producto->id ?? null,
+                'id_proveedor' => $producto->id_proveedor ?? null,
+                'sku_catalogo' => $producto->sku ?? null,
+                'tipo_producto' => $producto->tipo_producto ?? null,
+                'estado_validacion' => $validacion->estatus ?? null,
+            ]);
+        })->values();
+
+        // Si la búsqueda no coincidió por otro campo, se intenta por estatus de validación
+        if (!empty($request->search)) {
+            $search = $request->search;
+            $coincidePorOtroCampo = $canjes->contains(
+                fn($c) =>
+                    stripos($c->folio, $search) !== false
+                    || stripos($c->nombre_premio, $search) !== false
+                    || stripos($c->email, $search) !== false
+                    || stripos($c->sku, $search) !== false
+                    || stripos((string) $c->puntos_canjeados, $search) !== false
+            );
+
+            if (!$coincidePorOtroCampo) {
+                $canjes = $canjes
+                    ->filter(fn($c) => stripos((string) $c->estado_validacion, $search) !== false)
+                    ->values();
+            }
+        }
+
+        return $canjes;
     }
     private function columnasCanje(): array
     {
@@ -547,11 +500,11 @@ class CanjesController extends BaseController
                     'estado_validacion' => $validacion->estatus ?? null,
                     'nombre_plataforma' => $validacion->nombre_plataforma ?? $plataformaModel->nombre,
                     'codigo_validacion' => $validacion->codigo_validacion ?? null,
-                    'productos'         => $productos,
-                    'total_puntos'      => $filas->sum('puntos_canjeados'),
-                    'total_premios'     => $filas->sum('number_of_awards'),
-                    'nombre_premio'     => $filas->pluck('nombre_premio')->filter()->implode(', '),
-                    'puntos_canjeados'  => $filas->sum('puntos_canjeados'),
+                    'productos' => $productos,
+                    'total_puntos' => $filas->sum('puntos_canjeados'),
+                    'total_premios' => $filas->sum('number_of_awards'),
+                    'nombre_premio' => $filas->pluck('nombre_premio')->filter()->implode(', '),
+                    'puntos_canjeados' => $filas->sum('puntos_canjeados'),
                 ]
             );
 
@@ -696,8 +649,8 @@ class CanjesController extends BaseController
     public function enviarValidacionSinProveedor(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id'                      => 'required|integer',
-            'productos'               => 'required|array|min:1',
+            'id' => 'required|integer',
+            'productos' => 'required|array|min:1',
             'productos.*.id_producto' => 'required|integer',
         ]);
 
@@ -725,14 +678,14 @@ class CanjesController extends BaseController
                             ->where('id_plataforma', $id_plataforma);
                     })
                     ->update([
-                        'estatus'          => 'identidad_validada',
+                        'estatus' => 'identidad_validada',
                         'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
                     ]);
 
                 BitacoraEventos::create([
-                    'evento'      => 'Canje validado directamente',
+                    'evento' => 'Canje validado directamente',
                     'descripcion' => "El usuario con id: {$user->id} validó el canje: {$request->id} sin proveedor",
-                    'id_usuario'  => $user->id,
+                    'id_usuario' => $user->id,
                 ]);
             });
         } catch (\Throwable $th) {

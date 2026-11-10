@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SubCategoriaBrimagy extends Model
 {
@@ -21,4 +22,9 @@ class SubCategoriaBrimagy extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    public function categoria(): BelongsTo
+    {
+        return $this->belongsTo(CategoriaBrimagy::class, 'category_id');
+    }
 }

@@ -32,7 +32,13 @@ class DuplicadorValidacionCanje
                 continue;
             }
 
-            foreach (array_unique(array_map('intval', $proveedores)) as $idProveedor) {
+            $proveedores = array_values(array_unique(array_map('intval', $proveedores)));
+
+            if (!in_array((int) $origen->id_proveedor, $proveedores, true)) {
+                $this->cierre->retirarPorReasignacion($origen);
+            }
+
+            foreach ($proveedores as $idProveedor) {
                 if ((int) $origen->id_proveedor === $idProveedor) {
                     if (empty($origen->no_orden)) {
                         $resultado->push($origen);
@@ -47,11 +53,15 @@ class DuplicadorValidacionCanje
                     ->first();
 
                 if ($existente) {
+                    if (!empty($existente->fecha_reasignacion)) {
+                        $existente->fecha_reasignacion = null;
+                        $existente->save();
+                    }
                     $resultado->push($existente);
                     continue;
                 }
 
-                $copia = $origen->replicate(['no_orden', 'orden_ejecutada', 'fecha_ejecucion']);
+                $copia = $origen->replicate(['no_orden', 'orden_ejecutada', 'fecha_ejecucion', 'fecha_reasignacion']);
                 $copia->id_proveedor = $idProveedor;
                 $copia->no_orden = null;
                 $copia->id_validacion_origen = $origen->id_validacion_origen ?? $origen->id;

@@ -96,6 +96,7 @@ Route::put('activarFotoMonto', [ProductosController::class, 'activarFotoMonto'])
 Route::put('desactivarFotoMonto', [ProductosController::class, 'desactivarFotoMonto'])->middleware($SANCTUM);
 //CATALOGO CANJES
 Route::get('getCanjes', [CanjesController::class, 'getCanjes'])->middleware($SANCTUM);
+Route::get('getResumenCanjes', [CanjesController::class, 'getResumenCanjes'])->middleware($SANCTUM);
 
 //VALIDACIÓN DE IDENTIDAD
 Route::post('enviarValidacion', [CanjesController::class, 'enviarValidacion'])->middleware($SANCTUM);

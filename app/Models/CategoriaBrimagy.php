@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CategoriaBrimagy extends Model
 {
@@ -21,4 +22,9 @@ class CategoriaBrimagy extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    public function subcategorias(): HasMany
+    {
+        return $this->hasMany(SubCategoriaBrimagy::class, 'category_id');
+    }
 }

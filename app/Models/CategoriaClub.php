@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CategoriaClub extends Model
 {
@@ -21,4 +22,9 @@ class CategoriaClub extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    public function subcategorias(): HasMany
+    {
+        return $this->hasMany(SubCategoriaClub::class, 'category_id');
+    }
 }
