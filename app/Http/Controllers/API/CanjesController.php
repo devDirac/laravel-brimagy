@@ -44,7 +44,7 @@ class CanjesController extends BaseController
             ->filter(fn($p) => in_array((int) $p->award_id, $awardIds, true))
             ->values();
 
-        $canje->premios      = $canje->productos->pluck('nombre')->filter()->implode(', ');
+        $canje->premios = $canje->productos->pluck('nombre')->filter()->implode(', ');
         $canje->puntos_total = $canje->productos->sum('puntos');
 
         return $canje;
@@ -75,7 +75,11 @@ class CanjesController extends BaseController
 
         return $filas
             ->groupBy('id')
-            ->filter(fn($grupo) => $grupo->contains('tipo_producto', $tipo))
+            ->filter(
+                fn($grupo) =>
+                    $grupo->contains('tipo_producto', $tipo)
+                    || $grupo->every(fn($f) => $f->id_producto === null)
+            )
             ->flatMap(fn($grupo) => $grupo->filter(
                 fn($f) => $f->tipo_producto === $tipo || $f->id_producto === null
             ))
@@ -121,9 +125,9 @@ class CanjesController extends BaseController
     public function enviarValidacion(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id'                         => 'required|integer',
-            'productos'                  => 'required|array|min:1',
-            'productos.*.id_producto'    => 'required|integer',
+            'id' => 'required|integer',
+            'productos' => 'required|array|min:1',
+            'productos.*.id_producto' => 'required|integer',
             'productos.*.number_of_awards' => 'required|integer',
         ]);
 
@@ -144,9 +148,9 @@ class CanjesController extends BaseController
                 $this->registrarProductos($request, $user->id, $id_plataforma);
 
                 BitacoraEventos::create([
-                    'evento'      => 'Creación de validación de cliente',
+                    'evento' => 'Creación de validación de cliente',
                     'descripcion' => "El usuario con id: {$user->id} envió un mensaje para validar el canje: {$request->id}",
-                    'id_usuario'  => $user->id,
+                    'id_usuario' => $user->id,
                 ]);
             });
         } catch (\Throwable $th) {
@@ -236,15 +240,15 @@ class CanjesController extends BaseController
                 ->groupBy('id')
                 ->map(fn($filas) => strtolower((string) $filas->first()->estado_validacion));
 
-            $total      = $estados->count();
-            $validados  = $estados->filter(fn($e) => $e === 'identidad_validada')->count();
+            $total = $estados->count();
+            $validados = $estados->filter(fn($e) => $e === 'identidad_validada')->count();
             $sinValidar = $estados->filter(fn($e) => $e === '')->count();
 
             return $this->sendResponse([
-                'total'       => $total,
-                'validados'   => $validados,
+                'total' => $total,
+                'validados' => $validados,
                 'sin_validar' => $sinValidar,
-                'en_proceso'  => $total - $validados - $sinValidar,
+                'en_proceso' => $total - $validados - $sinValidar,
             ]);
         } catch (\Throwable $th) {
             return $this->sendError('Error al obtener el resumen de canjes', $th->getMessage(), 500);
@@ -364,14 +368,14 @@ class CanjesController extends BaseController
             ->map(fn($grupo) => $grupo->first());
 
         $canjes = $swaps->map(function ($swap) use ($catalogo, $validaciones) {
-            $producto   = $catalogo->get($swap->award_id);
+            $producto = $catalogo->get($swap->award_id);
             $validacion = $validaciones->get($swap->id);
 
             return (object) array_merge((array) $swap, [
-                'id_producto'       => $producto->id ?? null,
-                'id_proveedor'      => $producto->id_proveedor ?? null,
-                'sku_catalogo'      => $producto->sku ?? null,
-                'tipo_producto'     => $producto->tipo_producto ?? null,
+                'id_producto' => $producto->id ?? null,
+                'id_proveedor' => $producto->id_proveedor ?? null,
+                'sku_catalogo' => $producto->sku ?? null,
+                'tipo_producto' => $producto->tipo_producto ?? null,
                 'estado_validacion' => $validacion->estatus ?? null,
             ]);
         })->values();
@@ -381,7 +385,7 @@ class CanjesController extends BaseController
             $search = $request->search;
             $coincidePorOtroCampo = $canjes->contains(
                 fn($c) =>
-                stripos($c->folio, $search) !== false
+                    stripos($c->folio, $search) !== false
                     || stripos($c->nombre_premio, $search) !== false
                     || stripos($c->email, $search) !== false
                     || stripos($c->sku, $search) !== false
@@ -496,11 +500,11 @@ class CanjesController extends BaseController
                     'estado_validacion' => $validacion->estatus ?? null,
                     'nombre_plataforma' => $validacion->nombre_plataforma ?? $plataformaModel->nombre,
                     'codigo_validacion' => $validacion->codigo_validacion ?? null,
-                    'productos'         => $productos,
-                    'total_puntos'      => $filas->sum('puntos_canjeados'),
-                    'total_premios'     => $filas->sum('number_of_awards'),
-                    'nombre_premio'     => $filas->pluck('nombre_premio')->filter()->implode(', '),
-                    'puntos_canjeados'  => $filas->sum('puntos_canjeados'),
+                    'productos' => $productos,
+                    'total_puntos' => $filas->sum('puntos_canjeados'),
+                    'total_premios' => $filas->sum('number_of_awards'),
+                    'nombre_premio' => $filas->pluck('nombre_premio')->filter()->implode(', '),
+                    'puntos_canjeados' => $filas->sum('puntos_canjeados'),
                 ]
             );
 
@@ -645,8 +649,8 @@ class CanjesController extends BaseController
     public function enviarValidacionSinProveedor(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id'                      => 'required|integer',
-            'productos'               => 'required|array|min:1',
+            'id' => 'required|integer',
+            'productos' => 'required|array|min:1',
             'productos.*.id_producto' => 'required|integer',
         ]);
 
@@ -674,14 +678,14 @@ class CanjesController extends BaseController
                             ->where('id_plataforma', $id_plataforma);
                     })
                     ->update([
-                        'estatus'          => 'identidad_validada',
+                        'estatus' => 'identidad_validada',
                         'fecha_validacion' => now()->setTimezone('America/Mexico_City'),
                     ]);
 
                 BitacoraEventos::create([
-                    'evento'      => 'Canje validado directamente',
+                    'evento' => 'Canje validado directamente',
                     'descripcion' => "El usuario con id: {$user->id} validó el canje: {$request->id} sin proveedor",
-                    'id_usuario'  => $user->id,
+                    'id_usuario' => $user->id,
                 ]);
             });
         } catch (\Throwable $th) {
