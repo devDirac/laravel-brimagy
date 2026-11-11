@@ -20,8 +20,15 @@ use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
+use App\Http\Controllers\API\Concerns\RespondeConServicios;
+use App\Http\Requests\Canjes\CanjesPorEstatusRequest;
+use App\Services\Canjes\CanjesPorEstatusService;
+use App\Services\Canjes\ConsultaCanjesService;
+use App\Services\Canjes\FiltrosCanjes;
+
 class CanjesController extends BaseController
 {
+    use RespondeConServicios;
     protected $whatsappService;
 
     public function __construct()
@@ -222,184 +229,35 @@ class CanjesController extends BaseController
 
         return $id;
     }
-    public function getCanjes(Request $request)
+    public function getCanjes(Request $request, ConsultaCanjesService $consulta)
     {
-        try {
-            return $this->sendResponse($this->consultarCanjes($request));
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener los canjes', $th->getMessage(), 500);
-        }
+        return $this->responder(
+            fn() => $this->sendResponse($consulta->consultar(FiltrosCanjes::desdeRequest($request))),
+            'Error al obtener los canjes'
+        );
     }
+
     /**
      * Conteo de canjes por estatus de validación (un canje = un id, sin importar cuántos productos tenga).
      */
-    public function getResumenCanjes(Request $request)
+    public function getResumenCanjes(Request $request, CanjesPorEstatusService $servicio)
     {
-        try {
-            $estados = $this->consultarCanjes($request)
-                ->groupBy('id')
-                ->map(fn($filas) => strtolower((string) $filas->first()->estado_validacion));
-
-            $total = $estados->count();
-            $validados = $estados->filter(fn($e) => $e === 'identidad_validada')->count();
-            $sinValidar = $estados->filter(fn($e) => $e === '')->count();
-
-            return $this->sendResponse([
-                'total' => $total,
-                'validados' => $validados,
-                'sin_validar' => $sinValidar,
-                'en_proceso' => $total - $validados - $sinValidar,
-            ]);
-        } catch (\Throwable $th) {
-            return $this->sendError('Error al obtener el resumen de canjes', $th->getMessage(), 500);
-        }
+        return $this->responder(
+            fn() => $this->sendResponse($servicio->resumen(FiltrosCanjes::desdeRequest($request))),
+            'Error al obtener el resumen de canjes'
+        );
     }
 
-    private function consultarCanjes(Request $request): Collection
+    /**
+     * Canjes de un grupo del contador (total, sin_validar, en_proceso, validados).
+     * Mismo formato de filas que getCanjes y misma regla de agrupación que getResumenCanjes.
+     */
+    public function getCanjesPorEstatus(CanjesPorEstatusRequest $request, CanjesPorEstatusService $servicio)
     {
-        $filas = $request->plataforma === 'club_bohn'
-            ? $this->consultarCanjesClubBohn($request)
-            : $this->consultarCanjesPuntotes($request);
-
-        return $this->filtrarPorTipoProducto($filas, $request->tipo_producto);
-    }
-
-    private function aplicarFiltroFechas($query, Request $request): void
-    {
-        if (empty($request->fecha1) || empty($request->fecha2)) {
-            return;
-        }
-
-        $fecha1 = Carbon::parse($request->fecha1);
-        $fecha2 = Carbon::parse($request->fecha2);
-        [$inicio, $fin] = $fecha1->lt($fecha2) ? [$fecha1, $fecha2] : [$fecha2, $fecha1];
-
-        $query->whereBetween('sp.created_at', [
-            $inicio->copy()->startOfDay(),
-            $fin->copy()->endOfDay(),
-        ]);
-    }
-
-    private function consultarCanjesPuntotes(Request $request): Collection
-    {
-        $idPuntotes = Plataformas::where('nombre', 'puntotes')->value('id');
-
-        $query = DB::table('swaps_view as sp')
-            ->leftJoin('dc_validacion_canje as vc', function ($join) use ($idPuntotes) {
-                $join->on('vc.id_canje', '=', 'sp.id')
-                    ->whereRaw(
-                        'vc.id = (SELECT MAX(id) FROM dc_validacion_canje WHERE id_canje = sp.id AND id_plataforma = ?)',
-                        [$idPuntotes]
-                    );
-            })
-            ->leftJoin('dc_catalogo_productos as cdp', function ($join) use ($idPuntotes) {
-                $join->on('sp.award_id', '=', 'cdp.id_producto_brimagy')
-                    ->where('cdp.id_plataforma', '=', $idPuntotes);
-            })
-            ->select(array_merge($this->columnasCanje(), [
-                'cdp.id as id_producto',
-                'cdp.id_proveedor',
-                'cdp.sku as sku_catalogo',
-                'cdp.tipo_producto',
-                'vc.estatus as estado_validacion',
-            ]));
-
-        if (!empty($request->search)) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('sp.folio', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.points_swap', 'LIKE', "%{$search}%")
-                    ->orWhere('vc.estatus', 'LIKE', "%{$search}%");
-            });
-        }
-
-        $this->aplicarFiltroFechas($query, $request);
-
-        return $query->orderBy('sp.created_at', 'desc')->get();
-    }
-
-    private function consultarCanjesClubBohn(Request $request): Collection
-    {
-        $id_plataforma = Plataformas::where('nombre', 'club bohn')->value('id');
-        if (!$id_plataforma) {
-            throw new \RuntimeException('La plataforma "club bohn" no existe');
-        }
-
-        $query = DB::connection('mysql_club_bohn')
-            ->table('swaps_view as sp')
-            ->select($this->columnasCanje());
-
-        if (!empty($request->search)) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('sp.folio', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.desc', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.email', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.sku', 'LIKE', "%{$search}%")
-                    ->orWhere('sp.points_swap', 'LIKE', "%{$search}%");
-            });
-        }
-
-        $this->aplicarFiltroFechas($query, $request);
-
-        $swaps = $query->orderBy('sp.created_at', 'desc')->get();
-
-        if ($swaps->isEmpty()) {
-            return collect();
-        }
-
-        $catalogo = DB::table('dc_catalogo_productos')
-            ->where('id_plataforma', $id_plataforma)
-            ->whereIn('id_producto_brimagy', $swaps->pluck('award_id')->filter()->unique())
-            ->select('id', 'id_proveedor', 'sku', 'id_producto_brimagy', 'tipo_producto')
-            ->get()
-            ->keyBy('id_producto_brimagy');
-
-        // Última validación de cada canje, SOLO de club bohn
-        $validaciones = DB::table('dc_validacion_canje')
-            ->where('id_plataforma', $id_plataforma)
-            ->whereIn('id_canje', $swaps->pluck('id')->unique())
-            ->orderBy('id', 'desc')
-            ->get()
-            ->groupBy('id_canje')
-            ->map(fn($grupo) => $grupo->first());
-
-        $canjes = $swaps->map(function ($swap) use ($catalogo, $validaciones) {
-            $producto = $catalogo->get($swap->award_id);
-            $validacion = $validaciones->get($swap->id);
-
-            return (object) array_merge((array) $swap, [
-                'id_producto' => $producto->id ?? null,
-                'id_proveedor' => $producto->id_proveedor ?? null,
-                'sku_catalogo' => $producto->sku ?? null,
-                'tipo_producto' => $producto->tipo_producto ?? null,
-                'estado_validacion' => $validacion->estatus ?? null,
-            ]);
-        })->values();
-
-        // Si la búsqueda no coincidió por otro campo, se intenta por estatus de validación
-        if (!empty($request->search)) {
-            $search = $request->search;
-            $coincidePorOtroCampo = $canjes->contains(
-                fn($c) =>
-                    stripos($c->folio, $search) !== false
-                    || stripos($c->nombre_premio, $search) !== false
-                    || stripos($c->email, $search) !== false
-                    || stripos($c->sku, $search) !== false
-                    || stripos((string) $c->puntos_canjeados, $search) !== false
-            );
-
-            if (!$coincidePorOtroCampo) {
-                $canjes = $canjes
-                    ->filter(fn($c) => stripos((string) $c->estado_validacion, $search) !== false)
-                    ->values();
-            }
-        }
-
-        return $canjes;
+        return $this->responder(
+            fn() => $this->sendResponse($servicio->listar($request->filtros(), $request->estatus())),
+            'Error al obtener los canjes por estatus'
+        );
     }
     private function columnasCanje(): array
     {
@@ -446,7 +304,7 @@ class CanjesController extends BaseController
             // Una fila por producto del canje
             $filas = ($esClubBohn ? DB::connection('mysql_club_bohn') : DB::connection())
                 ->table('swaps_view as sp')
-                ->select($this->columnasCanje())
+                ->select(ConsultaCanjesService::COLUMNAS)
                 ->where('sp.id', $idCanje)
                 ->get();
 
