@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\DB;
 
 class CanjesPendientesRepository
 {
-    /** Validaciones listas para cotizar que aún no están en una orden de compra */
     public function base(): Builder
     {
         return DB::table('dc_validacion_canje as vc')

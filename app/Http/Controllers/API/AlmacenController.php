@@ -512,9 +512,9 @@ class AlmacenController extends BaseController
         DB::beginTransaction();
         try {
             $validator = Validator::make($request->all(), [
-                'id_orden_compra' => 'required|integer',
                 'guia_producto' => 'required|string',
                 'tipo_envio' => 'required|integer',
+                'id_producto_almacen' => 'required|integer',
             ]);
 
             if ($validator->fails()) {
@@ -522,14 +522,13 @@ class AlmacenController extends BaseController
                 return $this->sendError('El formato de datos no es válido.', $validator->errors());
             }
 
-            $existe = RecepcionAlmacen::where('id_orden_compra', $request->id_orden_compra)->exists();
+            $producto_almacen = RecepcionAlmacen::find($request->id_producto_almacen)->first();
 
-            if (!$existe) {
+            if (!$producto_almacen) {
                 DB::rollBack();
                 return $this->sendError('Este producto no se encuentra en almacen', 'error', 404);
             }
 
-            // Solo los registros de ESTE producto dentro del canje
             RecepcionAlmacen::where('id_canje', $producto_almacen->id_canje)
                 ->where('id_producto', $producto_almacen->id_producto)
                 ->update([

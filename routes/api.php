@@ -14,6 +14,7 @@ use App\Http\Controllers\API\NotificacionesController;
 use App\Http\Controllers\API\OrdenCompraController;
 use App\Http\Controllers\API\ProductosController;
 use App\Http\Controllers\API\ProveedorController;
+use App\Http\Controllers\API\ReporteSemanalController;
 use App\Http\Controllers\API\ReportesExcel;
 use App\Http\Controllers\API\UserController;
 
@@ -141,6 +142,8 @@ Route::put('enviarProductoAlmacen', [AlmacenController::class, 'enviarProductoAl
 Route::put('confirmarRecepcionProductoAlmacen', [AlmacenController::class, 'confirmarRecepcionProductoAlmacen'])->middleware($SANCTUM);
 Route::post('registrarNuevoPrecioAlmacen', [AlmacenController::class, 'registrarNuevoPrecioAlmacen'])->middleware($SANCTUM);
 Route::put('registrarMeiNoSerie', [AlmacenController::class, 'registrarMeiNoSerie'])->middleware($SANCTUM);
+//REPORTES ALMACÉN
+Route::get('getReporteSemanalAlmacen', [ReporteSemanalController::class, 'getReporteSemanalAlmacen'])->middleware($SANCTUM);
 
 //EVIDENCIAS DE ALMACEN DE PRODUCTOS
 Route::post('subirEvidencias', [EvidenciasController::class, 'subirEvidencias'])->middleware($SANCTUM);

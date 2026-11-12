@@ -17,8 +17,6 @@ use App\Mail\ValidacionCanjeEnviada;
 use App\Models\Plataformas;
 use App\Models\UsuariosPlataforma;
 use App\Services\WhatsAppService;
-use Carbon\Carbon;
-use Illuminate\Support\Collection;
 
 use App\Http\Controllers\API\Concerns\RespondeConServicios;
 use App\Http\Requests\Canjes\CanjesPorEstatusRequest;
@@ -70,28 +68,7 @@ class CanjesController extends BaseController
             ->map(fn($id) => (int) $id)
             ->all();
     }
-    /**
-     * Filtra filas de canje por tipo_producto, conservando los productos sin catálogo
-     * de los canjes que sí tienen al menos un producto de ese tipo.
-     */
-    private function filtrarPorTipoProducto(Collection $filas, ?string $tipo): Collection
-    {
-        if (!$tipo) {
-            return $filas;
-        }
 
-        return $filas
-            ->groupBy('id')
-            ->filter(
-                fn($grupo) =>
-                    $grupo->contains('tipo_producto', $tipo)
-                    || $grupo->every(fn($f) => $f->id_producto === null)
-            )
-            ->flatMap(fn($grupo) => $grupo->filter(
-                fn($f) => $f->tipo_producto === $tipo || $f->id_producto === null
-            ))
-            ->values();
-    }
     public function obtenerCodigoValidacion(Request $request)
     {
         DB::beginTransaction();
@@ -238,7 +215,7 @@ class CanjesController extends BaseController
     }
 
     /**
-     * Conteo de canjes por estatus de validación (un canje = un id, sin importar cuántos productos tenga).
+     * Conteo de canjes por estatus de validación
      */
     public function getResumenCanjes(Request $request, CanjesPorEstatusService $servicio)
     {
@@ -248,10 +225,6 @@ class CanjesController extends BaseController
         );
     }
 
-    /**
-     * Canjes de un grupo del contador (total, sin_validar, en_proceso, validados).
-     * Mismo formato de filas que getCanjes y misma regla de agrupación que getResumenCanjes.
-     */
     public function getCanjesPorEstatus(CanjesPorEstatusRequest $request, CanjesPorEstatusService $servicio)
     {
         return $this->responder(
@@ -259,36 +232,7 @@ class CanjesController extends BaseController
             'Error al obtener los canjes por estatus'
         );
     }
-    private function columnasCanje(): array
-    {
-        return [
-            'sp.id',
-            'sp.folio',
-            'sp.award_id',
-            'sp.name as nombre_usuario',
-            'sp.email',
-            'sp.phone',
-            'sp.number_of_awards',
-            'sp.size',
-            'sp.color',
-            'sp.category',
-            'sp.points_swap as puntos_canjeados',
-            'sp.desc as nombre_premio',
-            'sp.required_score as costo_premio',
-            'sp.sku',
-            'sp.street as calle',
-            'sp.number as numero_calle',
-            'sp.colony as colonia',
-            'sp.postal_code as codigo_postal',
-            'sp.municipality as municipio',
-            'sp.inside as numero_interior',
-            'sp.between_1',
-            'sp.between_2',
-            'sp.additional_reference as referencia_adicional',
-            'sp.created_at as creacion_canje',
-            'sp.status as estado_canje',
-        ];
-    }
+
     public function getCanjeById(Request $request)
     {
         try {
