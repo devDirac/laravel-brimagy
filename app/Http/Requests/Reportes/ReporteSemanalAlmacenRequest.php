@@ -4,7 +4,6 @@ namespace App\Http\Requests\Reportes;
 
 use App\Http\Requests\Productos\ApiFormRequest;
 use App\Services\ReporteSemanal\FiltrosReporteSemanal;
-use Illuminate\Validation\Rule;
 
 class ReporteSemanalAlmacenRequest extends ApiFormRequest
 {
@@ -16,7 +15,6 @@ class ReporteSemanalAlmacenRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'plataforma' => ['required', Rule::in(['puntotes', 'club_bohn'])],
             'id_periodo' => ['nullable', 'integer', 'exists:dc_periodos,id'],
             'semana' => ['nullable', 'integer', 'min:1'],
         ];

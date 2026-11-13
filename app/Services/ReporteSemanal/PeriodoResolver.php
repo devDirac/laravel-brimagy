@@ -3,35 +3,25 @@
 namespace App\Services\ReporteSemanal;
 
 use App\Exceptions\RecursoNoEncontradoException;
-use App\Models\Periodo;
-use App\Models\Plataformas;
 
 /**
- * Decide qué periodo usa el reporte
+ * Decide qué periodo usa el reporte general: el que pide el front (id_periodo)
+ * o, si no manda ninguno, el periodo activo más reciente de cualquier plataforma.
+ * El periodo solo define el rango de fechas; los registros son de todas las plataformas.
  */
 class PeriodoResolver
 {
+    public function __construct(private readonly PeriodosReporte $periodos) {}
+
     public function resolver(FiltrosReporteSemanal $filtros): PeriodoSemanal
     {
-        $idPlataforma = Plataformas::where('nombre', $filtros->nombrePlataforma())->value('id');
-
-        if (!$idPlataforma) {
-            throw new RecursoNoEncontradoException("La plataforma {$filtros->plataforma} no existe");
-        }
-
-        $periodo = Periodo::where('id_plataforma', $idPlataforma)
-            ->when(
-                $filtros->idPeriodo,
-                fn($q) => $q->where('id', $filtros->idPeriodo),
-                fn($q) => $q->where('activo', 1)->latest('id')
-            )
-            ->first();
+        $periodo = $filtros->idPeriodo
+            ? $this->periodos->porId($filtros->idPeriodo)
+            : $this->periodos->activoMasReciente();
 
         if (!$periodo) {
             throw new RecursoNoEncontradoException(
-                $filtros->idPeriodo
-                    ? 'El periodo no existe para esta plataforma'
-                    : 'La plataforma no tiene un periodo activo registrado'
+                $filtros->idPeriodo ? 'El periodo no existe' : 'No hay un periodo activo registrado'
             );
         }
 

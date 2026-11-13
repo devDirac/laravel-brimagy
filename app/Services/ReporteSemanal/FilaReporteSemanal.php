@@ -9,6 +9,11 @@ class FilaReporteSemanal
         $gestionada = (int) $registro->cantidad_gestionada;
         $entregada = (int) $registro->cantidad_entregada;
 
+        $continuacion = (bool) ($registro->es_continuacion ?? false);
+        $gestionada = $continuacion ? 0 : (int) $registro->cantidad_gestionada;
+        $entregada = (int) $registro->cantidad_entregada;
+        $faltante = (int) ($registro->faltante_acumulado ?? max((int) $registro->cantidad_gestionada - $entregada, 0));
+
         return [
             'id_producto_almacen' => (int) $registro->id_producto_almacen,
             'id_canje' => (int) $registro->id_canje,
@@ -16,6 +21,8 @@ class FilaReporteSemanal
             'id_orden_compra' => $registro->id_orden_compra !== null ? (int) $registro->id_orden_compra : null,
             'no_orden' => $registro->no_orden,
             'semana' => $semana,
+            'id_plataforma' => (int) $registro->id_plataforma,
+            'plataforma' => $registro->plataforma,
 
             'id_proveedor' => $registro->id_proveedor !== null ? (int) $registro->id_proveedor : null,
             'nombre_proveedor' => $registro->nombre_proveedor,
@@ -27,7 +34,9 @@ class FilaReporteSemanal
 
             'cantidad_gestionada' => $gestionada,
             'entrega' => $entregada,
-            'faltante' => max($gestionada - $entregada, 0),
+            'faltante' => $faltante,
+            'es_continuacion' => $continuacion,
+            'es_ultimo' => (bool) ($registro->es_ultimo ?? true),
 
             'tipo_envio' => $registro->tipo_envio !== null ? (int) $registro->tipo_envio : null,
             'notas' => TipoEnvio::notaDe($registro->tipo_envio),

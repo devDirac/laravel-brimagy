@@ -144,6 +144,8 @@ Route::post('registrarNuevoPrecioAlmacen', [AlmacenController::class, 'registrar
 Route::put('registrarMeiNoSerie', [AlmacenController::class, 'registrarMeiNoSerie'])->middleware($SANCTUM);
 //REPORTES ALMACÉN
 Route::get('getReporteSemanalAlmacen', [ReporteSemanalController::class, 'getReporteSemanalAlmacen'])->middleware($SANCTUM);
+Route::get('getPeriodosReporte', [ReporteSemanalController::class, 'getPeriodosReporte'])->middleware($SANCTUM);
+Route::get('exportarReporteSemanalAlmacenExcel', [ReporteSemanalController::class, 'exportarReporteSemanalAlmacenExcel'])->middleware($SANCTUM);
 
 //EVIDENCIAS DE ALMACEN DE PRODUCTOS
 Route::post('subirEvidencias', [EvidenciasController::class, 'subirEvidencias'])->middleware($SANCTUM);

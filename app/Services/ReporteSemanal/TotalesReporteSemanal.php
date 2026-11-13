@@ -13,7 +13,7 @@ class TotalesReporteSemanal
             'registros' => $filas->count(),
             'cantidad_gestionada' => (int) $filas->sum('cantidad_gestionada'),
             'entrega' => (int) $filas->sum('entrega'),
-            'faltante' => (int) $filas->sum('faltante'),
+            'faltante' => (int) $filas->filter(fn($f) => $f['es_ultimo'] ?? true)->sum('faltante'),
             'total' => round((float) $filas->sum('total'), 2),
         ];
     }

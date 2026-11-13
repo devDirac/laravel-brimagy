@@ -20,6 +20,7 @@ final class PeriodoSemanal
         public readonly CarbonImmutable $inicio,
         public readonly CarbonImmutable $fin,
         public readonly bool $activo,
+        public readonly ?string $plataforma = null,
     ) {}
 
     public static function desdeModelo(Periodo $periodo): self
@@ -30,6 +31,7 @@ final class PeriodoSemanal
             inicio: CarbonImmutable::parse($periodo->fecha_inicio)->startOfDay(),
             fin: CarbonImmutable::parse($periodo->fecha_fin)->startOfDay(),
             activo: (int) $periodo->activo === 1,
+            plataforma: $periodo->plataforma ?? null,
         );
     }
 
@@ -64,6 +66,7 @@ final class PeriodoSemanal
         return [
             'id' => $this->id,
             'id_plataforma' => $this->idPlataforma,
+            'plataforma' => $this->plataforma,
             'fecha_inicio' => $this->inicio->toDateString(),
             'fecha_fin' => $this->fin->toDateString(),
             'activo' => $this->activo,

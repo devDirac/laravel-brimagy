@@ -21,13 +21,14 @@ class ReporteSemanalAlmacenService
         private readonly FolioCanjeResolver $folios,
         private readonly FilaReporteSemanal $fila,
         private readonly TotalesReporteSemanal $totales,
+        private readonly FaltanteAcumulado $faltantes
     ) {}
 
     public function generar(FiltrosReporteSemanal $filtros): array
     {
         $periodo = $this->periodos->resolver($filtros);
 
-        $filasPorSemana = $this->conFolio($this->registros->obtener($periodo))
+        $filasPorSemana = $this->faltantes->aplicar($this->conFolio($this->registros->obtener($periodo)))
             ->map(function ($registro) use ($periodo) {
                 $semana = $periodo->numeroSemana($registro->fecha_referencia);
                 return $this->fila->mapear($registro, $semana);
@@ -48,7 +49,6 @@ class ReporteSemanalAlmacenService
             ->values();
 
         return [
-            'plataforma' => $filtros->nombrePlataforma(),
             'periodo' => $periodo->toArray(),
             'semanas' => $semanas,
             'totales' => $this->totales->calcular($semanas->pluck('registros')->flatten(1)),
